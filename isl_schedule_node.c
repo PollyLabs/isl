@@ -2723,6 +2723,27 @@ __isl_give isl_schedule_node *isl_schedule_node_delete(
 	return node;
 }
 
+/* Replace the subtree that "pos" points to by the one that "node" points to.
+ */
+__isl_give isl_schedule_node *isl_schedule_node_graft(
+	__isl_take isl_schedule_node *pos, __isl_take isl_schedule_node *node)
+{
+	isl_schedule_tree *tree;
+
+	if (!pos || !node)
+		goto error;
+
+	tree = isl_schedule_tree_copy(node->tree);
+	pos = isl_schedule_node_graft_tree(pos, tree);
+	isl_schedule_node_free(node);
+
+	return pos;
+error:
+	isl_schedule_node_free(pos);
+	isl_schedule_node_free(node);
+	return NULL;
+}
+
 /* Internal data structure for the group_ancestor callback.
  *
  * If "finished" is set, then we no longer need to modify

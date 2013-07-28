@@ -33,6 +33,8 @@ struct isl_schedule_node {
 __isl_give isl_schedule_node *isl_schedule_node_alloc(
 	__isl_take isl_schedule *schedule, __isl_take isl_schedule_tree *tree,
 	__isl_take isl_schedule_tree_list *ancestors, int *child_pos);
+__isl_give isl_schedule_node *isl_schedule_node_graft(
+	__isl_take isl_schedule_node *pos, __isl_take isl_schedule_node *node);
 __isl_give isl_schedule_node *isl_schedule_node_graft_tree(
 	__isl_take isl_schedule_node *pos, __isl_take isl_schedule_tree *tree);
 
