@@ -883,6 +883,18 @@ error:
 	return NULL;
 }
 
+/* Return a basis for the orthogonal complement of the space spanned
+ * by the rows of "M".
+ * That is, each of the rows of the result is orthogonal to each
+ * of the rows of "M".
+ *
+ * The complement is derived as the transpose of the right kernel.
+ */
+__isl_give isl_mat *isl_mat_row_complement(__isl_take isl_mat *mat)
+{
+	return isl_mat_transpose(isl_mat_right_kernel(mat));
+}
+
 __isl_give isl_mat *isl_mat_lin_to_aff(__isl_take isl_mat *mat)
 {
 	int i;
