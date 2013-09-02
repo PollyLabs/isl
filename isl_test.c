@@ -4513,6 +4513,120 @@ static int test_coalescing_schedule(isl_ctx *ctx)
 	return 0;
 }
 
+/* Input for tests on effect of a prefix schedule.
+ *
+ * "domain" is the set of elements that will be scheduled.
+ * "prefix" is the prefix schedule.  The prefix schedule is
+ * described as an isl_union_pw_multi_aff rather than
+ * as an isl_multi_union_pw_aff because the notation is
+ * a bit more concise.
+ * "outer_band_n" is the expected number of members
+ * in the outermost band of the generated schedule.
+ */
+struct {
+	const char *domain;
+	const char *prefix;
+	int outer_band_n;
+} prefix_tests[] = {
+	{ "[n] -> { S[i,j] : 0 <= i,j < n }", "{ S[i,j] -> [] }", 2 },
+	{ "[n] -> { S[i,j] : 0 <= i,j < n }", "{ S[i,j] -> [i] }", 1 },
+	{ "[n] -> { S[i,j] : 0 <= i,j < n }", "{ S[i,j] -> [i,j] }", 0 },
+	{ "[n] -> { S[i,j] : 0 <= i,j < n }", "{ S[i,j] -> [j,i] }", 0 },
+	{ "[n] -> { S[i,j] : 0 <= i,j < n }",
+	  "{ S[i,j] -> [floor(i/32),i mod 32] }", 1 },
+	{ "[n] -> { S[i,j] : 0 <= i,j < n }",
+	  "{ S[i,j] -> [floor(i/32),j mod 32] }", 2 },
+	{ "[n] -> { S[i,j] : 0 <= i,j < n }", "{ S[i,j] -> [floor(i/32)] }",
+	  2 },
+	{ "[n] -> { S[i,j] : 0 <= i,j < n }", "{ S[i,j] -> [i mod 32] }", 2 },
+	{ "[n] -> { S[i,j] : 0 <= i,j < n }",
+	  "[n] -> { S[i,j] -> [i] : 2i < n; S[i,j] -> [n - i] : 2i >= n }", 1 },
+	{ "[n] -> { S[i,j] : 0 <= i,j < n }",
+	  "[n] -> { S[i,j] -> [i,j] : 2i < n; S[i,j] -> [j,i] : 2i >= n }", 0 },
+	{ "[n] -> { S[i,j] : 0 <= i,j < n }",
+	  "[n] -> { S[i,j] -> [i] : 2i < n; S[i,j] -> [j] : 2i >= n }", 2 },
+	{ "[n] -> { S[i,j,k] : 0 <= i,j,k < n }",
+	  "[n] -> { S[i,j,k] -> [i,j] : 2i < n; "
+		    "S[i,j,k] -> [i + j,k] : 2i >= n }", 2 },
+	{ "[n] -> { S[i,j,k] : 0 <= i,j,k < n }",
+	  "[n] -> { S[i,j,k] -> [i] : 2i < n; S[i,j,k] -> [n - i] : 2i >= n }",
+	  2 },
+	{ "[n] -> { S[i,j,k] : 0 <= i,j,k < n }",
+	  "[n] -> { S[i,j,k] -> [i] : 2i < n; S[i,j,k] -> [i + j] : 2i >= n }",
+	  3},
+	{ "[n] -> { S[i,j,k] : 0 <= i,j,k < n }",
+	  "[n] -> { S[i,j,k] -> [i,j] : 2i < n; "
+		    "S[i,j,k] -> [i + j + k,k] : 2i >= n }", 2 },
+	{ "[n] -> { S[i,j,k] : 0 <= i,j,k < n }",
+	  "[n] -> { S[i,j,k] -> [i,0] : 2i < n; "
+		    "S[i,j,k] -> [i + k,k] : 2i >= n }", 2 },
+	{ "[n] -> { S[i] : 2 i = n }", "{ S[i,j] -> [i] }", 0 },
+};
+
+/* Move down in the schedule tree referenced by "node"
+ * to the outermost band node.
+ * Return a leaf node if there is no band node.
+ * The schedule is assumed to be linear, i.e., without
+ * any set or sequence node.
+ */
+static __isl_give isl_schedule_node *outer_band(
+	__isl_take isl_schedule_node *node)
+{
+	while (node && isl_schedule_node_has_children(node)) {
+		if (isl_schedule_node_get_type(node) == isl_schedule_node_band)
+			return node;
+		node = isl_schedule_node_first_child(node);
+	}
+
+	return node;
+}
+
+/* Perform some basic tests on prefix schedule constraints.
+ * In particular, check that the correct number of
+ * linearly independent rows is extracted from the prefix schedule
+ * by checking the number of members in the single resulting band.
+ */
+static int test_prefix_schedule_constraints(isl_ctx *ctx)
+{
+	int i;
+	const char *str;
+	isl_union_set *domain;
+	isl_union_pw_multi_aff *upma;
+	isl_multi_union_pw_aff *prefix;
+	isl_schedule_constraints *sc;
+	isl_schedule *schedule;
+	isl_schedule_node *node;
+	int dim;
+
+	for (i = 0; i < ARRAY_SIZE(prefix_tests); ++i) {
+		str = prefix_tests[i].domain;
+		domain = isl_union_set_read_from_str(ctx, str);
+		str = prefix_tests[i].prefix;
+		upma = isl_union_pw_multi_aff_read_from_str(ctx, str);
+		prefix = isl_multi_union_pw_aff_from_union_pw_multi_aff(upma);
+		sc = isl_schedule_constraints_on_domain(domain);
+		sc = isl_schedule_constraints_set_prefix(sc, prefix);
+		schedule = isl_schedule_constraints_compute_schedule(sc);
+		node = isl_schedule_get_root(schedule);
+		node = outer_band(node);
+		if (isl_schedule_node_get_type(node) == isl_schedule_node_band)
+			dim = isl_schedule_node_band_n_member(node);
+		else
+			dim = 0;
+		isl_schedule_node_free(node);
+		isl_schedule_free(schedule);
+
+		if (!node)
+			return -1;
+		if (dim != prefix_tests[i].outer_band_n)
+			isl_die(ctx, isl_error_unknown,
+				"unexpected number of members in outer band",
+				return -1);
+	}
+
+	return 0;
+}
+
 /* Check that the scheduler does not perform any needless
  * compound skewing.  Earlier versions of isl would compute
  * schedules in terms of transformed schedule coefficients and
@@ -4830,6 +4944,8 @@ int test_schedule(isl_ctx *ctx)
 	ctx->opt->schedule_algorithm = ISL_SCHEDULE_ALGORITHM_ISL;
 
 	if (test_conditional_schedule_constraints(ctx) < 0)
+		return -1;
+	if (test_prefix_schedule_constraints(ctx) < 0)
 		return -1;
 
 	if (test_strongly_satisfying_schedule(ctx) < 0)

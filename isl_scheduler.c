@@ -447,6 +447,10 @@ static int is_multi_edge_type(struct isl_sched_edge *edge)
  * is the original, uncompressed dependence relation, while
  * the value is the dual of the compressed dependence relation.
  *
+ * prefix is the schedule prefix specified by the user.
+ * This field may be NULL if no (non-trivial) schedule prefix
+ * was specified.
+ *
  * n is the number of nodes
  * node is the list of nodes
  * maxvar is the maximal number of variables over all nodes
@@ -495,6 +499,8 @@ struct isl_sched_graph {
 	isl_map_to_basic_set *intra_hmap;
 	isl_map_to_basic_set *intra_hmap_param;
 	isl_map_to_basic_set *inter_hmap;
+
+	isl_multi_union_pw_aff *prefix;
 
 	struct isl_sched_node *node;
 	int n;
@@ -926,6 +932,8 @@ static void graph_free(isl_ctx *ctx, struct isl_sched_graph *graph)
 		isl_hash_table_free(ctx, graph->edge_table[i]);
 	isl_hash_table_free(ctx, graph->node_table);
 	isl_basic_set_free(graph->lp);
+
+	isl_multi_union_pw_aff_free(graph->prefix);
 }
 
 /* For each "set" on which this function is called, increment
@@ -950,13 +958,17 @@ static isl_stat init_n_maxvar(__isl_take isl_set *set, void *user)
  * for each basic map in the dependences.
  * Note that it is practically impossible to exhaust both
  * the number of dependences and the number of variables.
+ * If any prefix schedule was specified, then the initial rows
+ * are initialized from this prefix.  Since the prefix may be
+ * completely trivial, it needs to be taken into account separately.
  */
 static isl_stat compute_max_row(struct isl_sched_graph *graph,
 	__isl_keep isl_schedule_constraints *sc)
 {
-	int n_edge;
+	int n_prefix, n_edge;
 	isl_stat r;
 	isl_union_set *domain;
+	isl_multi_union_pw_aff *prefix;
 
 	graph->n = 0;
 	graph->maxvar = 0;
@@ -965,10 +977,15 @@ static isl_stat compute_max_row(struct isl_sched_graph *graph,
 	isl_union_set_free(domain);
 	if (r < 0)
 		return isl_stat_error;
+	prefix = isl_schedule_constraints_get_prefix(sc);
+	n_prefix = isl_multi_union_pw_aff_dim(prefix, isl_dim_set);
+	isl_multi_union_pw_aff_free(prefix);
+	if (!prefix)
+		return isl_stat_error;
 	n_edge = isl_schedule_constraints_n_basic_map(sc);
 	if (n_edge < 0)
 		return isl_stat_error;
-	graph->max_row = n_edge + graph->maxvar;
+	graph->max_row = n_prefix + n_edge + graph->maxvar;
 
 	return isl_stat_ok;
 }
@@ -1385,6 +1402,30 @@ static __isl_give isl_map *insert_dummy_tags(__isl_take isl_map *map)
 	return map;
 }
 
+/* Return a map in the same space as that of "map" that relates
+ * the elements with equal schedule prefix.
+ * Use the original schedule prefix specified by the user and
+ * not the linear information extracted from it for the purpose
+ * of avoiding redundant rows in the generated schedule.
+ */
+static __isl_give isl_map *extract_equal_prefix(struct isl_sched_graph *graph,
+	__isl_keep isl_map *map)
+{
+	isl_space *space;
+	isl_union_map *umap;
+	isl_multi_union_pw_aff *prefix;
+
+	space = isl_map_get_space(map);
+	map = isl_map_universe(isl_space_copy(space));
+	umap = isl_union_map_from_map(map);
+	prefix = isl_multi_union_pw_aff_copy(graph->prefix);
+	umap = isl_union_map_eq_at_multi_union_pw_aff(umap, prefix);
+	map = isl_union_map_extract_map(umap, space);
+	isl_union_map_free(umap);
+
+	return map;
+}
+
 /* Given that at least one of "src" or "dst" is compressed, return
  * a map between the spaces of these nodes restricted to the affine
  * hull that was used in the compression.
@@ -1495,6 +1536,11 @@ static struct isl_sched_edge *skip_edge(struct isl_sched_graph *graph,
  * This ensures that there are no schedule constraints defined
  * outside of these domains, while the scheduler no longer has
  * any control over those outside parts.
+ *
+ * If a (non-trivial) prefix schedule was specified by the user,
+ * then only retain dependences between instances with equal
+ * prefix values.  If the specified prefix schedule was incomplete,
+ * then this may result in the removal of all dependences.
  */
 static struct isl_sched_edge *add_edge(struct isl_sched_graph *graph,
 	enum isl_edge_type type, __isl_take isl_map *map)
@@ -1513,6 +1559,14 @@ static struct isl_sched_edge *add_edge(struct isl_sched_graph *graph,
 		} else {
 			tagged = insert_dummy_tags(isl_map_copy(map));
 		}
+	}
+
+	if (graph->prefix) {
+		isl_map *equal_prefix;
+		equal_prefix = extract_equal_prefix(graph, map);
+		if (tagged)
+			tagged = map_intersect_domains(tagged, equal_prefix);
+		map = isl_map_intersect(map, equal_prefix);
 	}
 
 	src = find_domain_node(ctx, graph, map);
@@ -1934,6 +1988,206 @@ static isl_stat graph_set_inter(struct isl_sched_graph *graph,
 	return r;
 }
 
+/* Extract (a basis for) the purely linear part of "ma",
+ * i.e., the coefficients of the input variables but not the local variables.
+ *
+ * There may be linear combinations of the elements of "ma"
+ * that do not involve local variables, while the elements themselves
+ * do involve local variables.
+ * Perform Gaussian elimination to remove local variables from
+ * as many rows as possible and subsequently remove the remaining rows
+ * involving local variables as well as the columns corresponding
+ * to the local variables.
+ */
+static __isl_give isl_mat *extract_pure_linear(__isl_take isl_multi_aff *ma)
+{
+	int i, n, n_var, n_div;
+	isl_mat *rows;
+
+	if (!ma)
+		return NULL;
+
+	n_var = isl_multi_aff_dim(ma, isl_dim_in);
+
+	rows = extract_linear(ma);
+	rows = isl_mat_reverse_gauss(rows);
+
+	if (!rows)
+		return NULL;
+
+	n = isl_mat_rows(rows);
+	n_div = isl_mat_cols(rows) - n_var;
+	for (i = n - 1; i >= 0; --i)
+		if (isl_seq_first_non_zero(rows->row[i] + n_var, n_div) == -1)
+			break;
+	rows = isl_mat_drop_rows(rows, i + 1, n - (i + 1));
+	rows = isl_mat_drop_cols(rows, n_var, n_div);
+
+	return rows;
+}
+
+/* Extend "complement" with the complement of the purely linear part of "ma".
+ */
+static isl_stat extend_prefix_complement(__isl_take isl_set *dom,
+	__isl_take isl_multi_aff *ma, void *user)
+{
+	isl_mat *complement_ma;
+	isl_mat **complement = user;
+
+	isl_set_free(dom);
+
+	complement_ma = isl_mat_row_complement(extract_pure_linear(ma));
+
+	*complement = isl_mat_concat(*complement, complement_ma);
+
+	return *complement ? isl_stat_ok : isl_stat_error;
+}
+
+/* Extract a linear prefix schedule from "pma" that is valid
+ * for all pieces.
+ * In particular, if there are multiple pieces, then the result
+ * contains linear combinations that have a fixed value in all pieces.
+ * That is, if there is a direction that is not fixed in one or more pieces,
+ * then it is also not fixed by the entire piecewise expression.
+ * A direction that is not fixed needs to have a component along
+ * the orthogonal complement of the fixed directions.
+ * Collect these orthogonal complements over all pieces and
+ * compute the complement of the result to obtain the desired directions.
+ *
+ * If "pma" is empty (which indicates a missing, and therefore invalid,
+ * prefix schedule), then the result will contain a basis for all directions,
+ * being the complement of an empty complement.
+ */
+static __isl_give isl_mat *extract_prefix_pw_multi_aff(
+	__isl_keep isl_pw_multi_aff *pma)
+{
+	int nvar;
+	isl_ctx *ctx;
+	isl_mat *complement;
+
+	if (!pma)
+		return NULL;
+
+	ctx = isl_pw_multi_aff_get_ctx(pma);
+	nvar = isl_pw_multi_aff_dim(pma, isl_dim_in);
+	complement = isl_mat_alloc(ctx, 0, nvar);
+
+	if (isl_pw_multi_aff_foreach_piece(pma, &extend_prefix_complement,
+						&complement) < 0)
+		complement = isl_mat_free(complement);
+
+	return isl_mat_row_complement(complement);
+}
+
+/* Extract a prefix schedule for "node" from "mupa" and add
+ * it to node->sched.
+ *
+ * "mupa" is formulated in terms of the original (uncompressed) spaces,
+ * while node->sched is formulated in terms of the potentially compressed
+ * space.  If "node" is compressed, then the expression corresponding
+ * to "node" therefore needs to be transformed first.
+ *
+ * The prefix stored in node->sched is only used to avoid linearly
+ * dependent schedule rows from being generated.  Only the linear
+ * part of the prefix is therefore relevant.  Use zero for
+ * the coefficients of the constant term and the parameters.
+ * The extracted linear part may have fewer rows than "mupa",
+ * either because of linear dependences or because some element
+ * of "mupa" involve local variables.
+ * Extend the number of rows of the linear part to the number
+ * of elements in "mupa" to ensure that all nodes have the same
+ * number of rows.
+ *
+ * If "mupa" does not contain a prefix schedule for "node",
+ * then it is invalid.  In the current implementation, this will
+ * cause the scheduler to not construct any further schedule rows
+ * for "node".
+ */
+static isl_stat extract_prefix(struct isl_sched_node *node,
+	__isl_keep isl_multi_union_pw_aff *mupa)
+{
+	isl_space *space;
+	isl_multi_pw_aff *mpa;
+	isl_pw_multi_aff *pma;
+	isl_mat *prefix;
+	int n, n_prefix;
+
+	if (!mupa)
+		return isl_stat_error;
+
+	space = isl_space_copy(node->space);
+	mpa = isl_multi_union_pw_aff_extract_multi_pw_aff(mupa, space);
+
+	if (node->compress)
+		mpa = isl_multi_pw_aff_pullback_multi_aff(mpa,
+					isl_multi_aff_copy(node->decompress));
+
+	pma = isl_pw_multi_aff_from_multi_pw_aff(mpa);
+
+	prefix = extract_prefix_pw_multi_aff(pma);
+
+	prefix = isl_mat_insert_zero_cols(prefix, 0, 1 + node->nparam);
+	n_prefix = isl_multi_union_pw_aff_dim(mupa, isl_dim_set);
+	n = isl_mat_rows(prefix);
+	prefix = isl_mat_add_zero_rows(prefix, n_prefix - n);
+	node->sched = isl_mat_concat(node->sched, prefix);
+
+	isl_pw_multi_aff_free(pma);
+
+	if (!node->sched)
+		return isl_stat_error;
+
+	return isl_stat_ok;
+}
+
+/* Check if any (non-trivial) prefix schedule was specified in "sc".
+ * If so, store a copy in "graph" for later simplification
+ * of dependence relations and extract the linear parts
+ * in the respective nodes.
+ * These linear parts are considered as an initial outer band.
+ * Their only effect is to try and prevent rows in the generated schedule
+ * from being linear combinations of the prefix.
+ *
+ * Since the prefix schedule cannot be assumed to be linearly
+ * independent on all nodes, graph->n_row is not incremented.
+ * Note that the ranks of the nodes will get updated regardless and
+ * graph->maxvar is computed based on these ranks.  The test for
+ * whether more schedule rows are required in compute_schedule_wcc
+ * therefore does take the prefix into account.
+ *
+ * The prefix schedule specified by the user is required to
+ * be complete on the domain.  An invalid prefix will result
+ * in nodes being essentially removed from consideration.
+ */
+static isl_stat handle_prefix(struct isl_sched_graph *graph,
+	__isl_keep isl_schedule_constraints *sc)
+{
+	int i;
+	int n;
+	isl_multi_union_pw_aff *mupa;
+
+	mupa = isl_schedule_constraints_get_prefix(sc);
+	if (!mupa)
+		return isl_stat_error;
+	n = isl_multi_union_pw_aff_dim(mupa, isl_dim_set);
+	if (n == 0) {
+		isl_multi_union_pw_aff_free(mupa);
+		return isl_stat_ok;
+	}
+
+	graph->prefix = mupa;
+
+	for (i = 0; i < graph->n; ++i) {
+		if (extract_prefix(&graph->node[i], mupa) < 0)
+			return isl_stat_error;
+	}
+
+	graph->n_total_row = n;
+	graph->band_start = graph->n_total_row;
+
+	return isl_stat_ok;
+}
+
 /* Initialize the schedule graph "graph" from the schedule constraints "sc".
  *
  * The context is included in the domain before the nodes of
@@ -1985,6 +2239,8 @@ static isl_stat graph_init(struct isl_sched_graph *graph,
 	if (graph_init_table(ctx, graph) < 0)
 		return isl_stat_error;
 	if (graph_set_intra(graph, sc) < 0)
+		return isl_stat_error;
+	if (handle_prefix(graph, sc) < 0)
 		return isl_stat_error;
 	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i) {
 		c = isl_schedule_constraints_get(sc, i);

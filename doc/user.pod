@@ -9631,6 +9631,10 @@ and manipulated using the following functions.
 		__isl_take isl_schedule_constraints *sc,
 		__isl_take isl_map_list *inter);
 	__isl_give isl_schedule_constraints *
+	isl_schedule_constraints_set_prefix(
+		__isl_take isl_schedule_constraints *sc,
+		__isl_take isl_multi_union_pw_aff *prefix);
+	__isl_give isl_schedule_constraints *
 	isl_schedule_constraints_apply(
 		__isl_take isl_schedule_constraints *sc,
 		__isl_take isl_union_map *umap);
@@ -9721,6 +9725,20 @@ the intra-statement consecutivity constraints.
 This means in particular that at outer levels of the schedule,
 these pairs are coscheduled.
 
+The function C<isl_schedule_constraints_set_prefix>
+replaces the prefix schedule.
+Pairs of instances with the same value for the prefix schedule
+are assumed to be executed together already by the scheduler.
+This has two implications.
+First, only dependences between pairs of instances with
+the same prefix value are assumed to be relevant by the scheduler.
+Second, schedule rows that are linear combinations of
+those in the prefix schedule are considered to be redundant and
+will therefore not appear in the generated schedule,
+except to balance out band schedules.
+That is, for each band schedule there will be at least one
+scheduled statement without any redundant rows.
+
 The function C<isl_schedule_constraints_apply> takes
 schedule constraints that are defined on some set of domain elements
 and transforms them to schedule constraints on the elements
@@ -9758,6 +9776,9 @@ using the following functions.
 		__isl_keep isl_schedule_constraints *sc);
 	__isl_give isl_map_list *
 	isl_schedule_constraints_get_inter_consecutivity(
+		__isl_keep isl_schedule_constraints *sc);
+	__isl_give isl_multi_union_pw_aff *
+	isl_schedule_constraints_get_prefix(
 		__isl_keep isl_schedule_constraints *sc);
 
 An C<isl_schedule_constraints> object can be read from input
