@@ -13413,21 +13413,30 @@ __isl_give isl_set *isl_set_preimage_multi_pw_aff(__isl_take isl_set *set,
 	return isl_map_preimage_multi_pw_aff(set, isl_dim_set, mpa);
 }
 
+/* Return a (borrowed) copy of the equality constraints of "bmap" as a matrix.
+ * The returned object is invalidated by any change to "bmap".
+ */
+__isl_give isl_mat *isl_basic_map_extract_equalities(
+	__isl_keep isl_basic_map *bmap)
+{
+	isl_ctx *ctx;
+	unsigned total;
+
+	if (!bmap)
+		return NULL;
+
+	ctx = isl_basic_map_get_ctx(bmap);
+	total = 1 + isl_basic_map_dim(bmap, isl_dim_all);
+	return isl_mat_sub_alloc6(ctx, bmap->eq, 0, bmap->n_eq, 0, total);
+}
+
 /* Return a (borrowed) copy of the equality constraints of "bset" as a matrix.
  * The returned object is invalidated by any change to "bset".
  */
 __isl_give isl_mat *isl_basic_set_extract_equalities(
 	__isl_keep isl_basic_set *bset)
 {
-	isl_ctx *ctx;
-	unsigned total;
-
-	if (!bset)
-		return NULL;
-
-	ctx = isl_basic_set_get_ctx(bset);
-	total = 1 + isl_basic_set_dim(bset, isl_dim_all);
-	return isl_mat_sub_alloc6(ctx, bset->eq, 0, bset->n_eq, 0, total);
+	return isl_basic_map_extract_equalities(bset_to_bmap(bset));
 }
 
 /* Are the "n" "coefficients" starting at "first" of the integer division
