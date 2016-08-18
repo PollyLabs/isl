@@ -1,6 +1,7 @@
 /*
  * Copyright 2008-2009 Katholieke Universiteit Leuven
  * Copyright 2010-2011 INRIA Saclay
+ * Copyright 2016      INRIA Paris
  *
  * Use of this software is governed by the MIT license
  *
@@ -8,12 +9,17 @@
  * Computerwetenschappen, Celestijnenlaan 200A, B-3001 Leuven, Belgium
  * and INRIA Saclay - Ile-de-France, Parc Club Orsay Universite,
  * ZAC des vignes, 4 rue Jacques Monod, 91893 Orsay, France 
+ * and Centre de Recherche Inria de Paris, 2 rue Simone Iff - Voie DQ12,
+ * CS 42112, 75589 Paris Cedex 12, France
  */
 
 #include <isl_map_private.h>
 #include <isl_space_private.h>
 #include <isl_dim_map.h>
 #include <isl_reordering.h>
+#include <isl_vec_private.h>
+#include <isl_mat_private.h>
+#include <isl_seq.h>
 
 struct isl_dim_map_entry {
 	int pos;
@@ -129,6 +135,87 @@ static void copy_div_dim_map(isl_int *dst, isl_int *src,
 {
 	isl_int_set(dst[0], src[0]);
 	copy_constraint_dim_map(dst+1, src+1, dim_map);
+}
+
+/* Apply the transformation on coordinates "dim_map" to
+ * the constraints in "mat".  The first column in "mat" corresponds
+ * to the constant term.
+ *
+ * The caller ensures that "dst" only has a single reference,
+ * but it may be aliased to "src".
+ */
+static __isl_give isl_mat *mat_dim_map(__isl_take isl_mat *dst,
+	__isl_keep isl_mat *src, __isl_take isl_dim_map *dim_map)
+{
+	isl_ctx *ctx;
+	isl_vec *v;
+	int i;
+	unsigned n, len;
+
+	if (!dst || !src || !dim_map)
+		goto error;
+
+	n = isl_mat_rows(src);
+	if (n == 0) {
+		free(dim_map);
+		return dst;
+	}
+
+	ctx = isl_mat_get_ctx(src);
+	len = dim_map->len;
+	v = isl_vec_alloc(ctx, len);
+	if (!v)
+		goto error;
+
+	for (i = 0; i < n; ++i) {
+		copy_constraint_dim_map(v->el, src->row[i], dim_map);
+		isl_seq_cpy(dst->row[i], v->el, len);
+	}
+
+	isl_vec_free(v);
+	free(dim_map);
+	return dst;
+error:
+	free(dim_map);
+	isl_mat_free(dst);
+	return NULL;
+}
+
+/* Apply the transformation on coordinates "dim_map" to
+ * the constraints in "mat".  The first column in "mat" corresponds
+ * to the constant term.
+ *
+ * If "dim_map" only specifies a reordering, but does not change
+ * the dimension, then perform the transformation in-place.
+ * Otherwise, create a new matrix.
+ */
+__isl_give isl_mat *isl_mat_dim_map(__isl_take isl_mat *mat,
+	__isl_take isl_dim_map *dim_map)
+{
+	isl_ctx *ctx;
+	isl_mat *res;
+	unsigned n, len;
+
+	if (!mat || !dim_map)
+		goto error;
+
+	ctx = isl_mat_get_ctx(mat);
+	len = dim_map->len;
+	if (len == isl_mat_cols(mat)) {
+		mat = isl_mat_cow(mat);
+		res = mat_dim_map(mat, mat, dim_map);
+	} else {
+		n = isl_mat_rows(mat);
+		res = isl_mat_alloc(ctx, n, len);
+		res = mat_dim_map(res, mat, dim_map);
+		isl_mat_free(mat);
+	}
+
+	return res;
+error:
+	free(dim_map);
+	isl_mat_free(mat);
+	return NULL;
 }
 
 __isl_give isl_basic_map *isl_basic_map_add_constraints_dim_map(

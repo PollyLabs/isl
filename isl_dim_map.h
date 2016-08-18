@@ -2,6 +2,7 @@
 #define ISL_DIM_MAP_H
 
 #include <isl/ctx.h>
+#include <isl/mat.h>
 #include <isl/space.h>
 #include <isl/map.h>
 #include <isl_reordering.h>
@@ -20,6 +21,8 @@ void isl_dim_map_dim(__isl_keep isl_dim_map *dim_map, __isl_keep isl_space *dim,
 	enum isl_dim_type type, unsigned dst_pos);
 void isl_dim_map_div(__isl_keep isl_dim_map *dim_map,
 	__isl_keep isl_basic_map *bmap, unsigned dst_pos);
+__isl_give isl_mat *isl_mat_dim_map(__isl_take isl_mat *mat,
+	__isl_take isl_dim_map *dim_map);
 __isl_give isl_basic_set *isl_basic_set_add_constraints_dim_map(
 	__isl_take isl_basic_set *dst, __isl_take isl_basic_set *src,
 	__isl_take isl_dim_map *dim_map);
