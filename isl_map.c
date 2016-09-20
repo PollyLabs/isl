@@ -130,7 +130,7 @@ unsigned isl_basic_set_offset(__isl_keep isl_basic_set *bset,
 	return isl_basic_map_offset(bset, type);
 }
 
-static unsigned map_offset(__isl_keep isl_map *map, enum isl_dim_type type)
+static unsigned isl_map_offset(__isl_keep isl_map *map, enum isl_dim_type type)
 {
 	return pos(map->dim, type);
 }
@@ -9443,7 +9443,7 @@ isl_bool isl_map_plain_is_fixed(__isl_keep isl_map *map,
 		isl_die(isl_map_get_ctx(map), isl_error_invalid,
 			"position out of bounds", return isl_bool_error);
 	return isl_map_plain_has_fixed_var(map,
-		map_offset(map, type) - 1 + pos, val);
+		isl_map_offset(map, type) - 1 + pos, val);
 }
 
 /* If "map" obviously lies on a hyperplane where the given dimension
