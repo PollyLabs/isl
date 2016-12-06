@@ -625,6 +625,11 @@ static __isl_give isl_printer *print_constraints(__isl_keep isl_basic_map *bmap,
 		goto error;
 
 	for (i = bmap->n_eq - 1; i >= 0; --i) {
+
+		p = print_affine(bmap, space, div, p, bmap->eq[i]);
+		p = isl_printer_print_str(p, " = 0 and ");
+		continue;
+
 		int l = isl_seq_last_non_zero(bmap->eq[i], 1 + total);
 		if (l < 0) {
 			if (i != bmap->n_eq - 1)
@@ -641,6 +646,11 @@ static __isl_give isl_printer *print_constraints(__isl_keep isl_basic_map *bmap,
 		first = 0;
 	}
 	for (i = 0; i < bmap->n_ineq; ++i) {
+
+		p = print_affine(bmap, space, div, p, bmap->ineq[i]);
+		p = isl_printer_print_str(p, " >= 0 and ");
+		continue;
+
 		int l = isl_seq_last_non_zero(bmap->ineq[i], 1 + total);
 		int strict;
 		int s;
@@ -1351,6 +1361,8 @@ __isl_give isl_printer *isl_printer_print_basic_set(__isl_take isl_printer *p,
 		return bset_print_constraints_polylib(bset, p);
 	else if (p->output_format == ISL_FORMAT_OMEGA)
 		return basic_set_print_omega(bset, p);
+//	else if (p->output_format == ISL_FORMAT_CPXLP)
+//		return basic_set_print_cpxlp(bset, p);
 	isl_assert(p->ctx, 0, goto error);
 error:
 	isl_printer_free(p);

@@ -197,6 +197,8 @@ struct isl_sched_edge {
 	int start;
 	int end;
 
+	int id;
+
 	int no_merge;
 	int weight;
 };
@@ -1233,8 +1235,24 @@ static isl_stat extract_edge(__isl_take isl_map *map, void *user)
 	struct isl_sched_edge *edge;
 	isl_map *tagged = NULL;
 
+
 	if (data->type == isl_edge_condition ||
-	    data->type == isl_edge_conditional_validity) {
+	    data->type == isl_edge_conditional_validity ||
+		data->type == isl_edge_proximity) {
+		if (data->type == isl_edge_proximity) {
+//			isl_map_dump(map);
+			isl_space *space = isl_map_get_space(map);
+			space = isl_space_domain(space);
+//			isl_space_dump(space);
+			space = isl_space_unwrap(space);
+//			isl_space_dump(space);
+			char* str = isl_space_get_tuple_name(space, isl_dim_out);
+			isl_id *id = isl_space_get_tuple_id(space, isl_dim_out);
+			printf("%s\n ", str);
+			isl_map_dump(map);
+
+		}
+
 		if (isl_map_can_zip(map)) {
 			tagged = isl_map_copy(map);
 			map = isl_set_unwrap(isl_map_domain(isl_map_zip(map)));
@@ -1279,12 +1297,14 @@ static isl_stat extract_edge(__isl_take isl_map *map, void *user)
 		graph->n_edge++;
 		return isl_stat_error;
 	}
-	if (edge == &graph->edge[graph->n_edge])
+//	if (edge == &graph->edge[graph->n_edge])
 		return graph_edge_table_add(ctx, graph, data->type,
 				    &graph->edge[graph->n_edge++]);
 
 	if (merge_edge(edge, &graph->edge[graph->n_edge]) < 0)
 		return -1;
+
+	edge->id++;
 
 	return graph_edge_table_add(ctx, graph, data->type, edge);
 }
@@ -1946,6 +1966,8 @@ static isl_stat add_intra_proximity_constraints(struct isl_sched_graph *graph,
 	isl_basic_set *coef;
 	struct isl_sched_node *node = edge->src;
 
+	isl_map_dump(map);
+
 	coef = intra_coefficients(graph, node, map, !local);
 
 	offset = coef_var_offset(coef);
@@ -1956,12 +1978,22 @@ static isl_stat add_intra_proximity_constraints(struct isl_sched_graph *graph,
 	nparam = isl_space_dim(node->space, isl_dim_param);
 	dim_map = intra_dim_map(ctx, graph, node, offset, -s);
 
+//	isl_dim_map_dump(dim_map);
 	if (!local) {
-		isl_dim_map_range(dim_map, 1, 0, 0, 0, 1, 1);
-		isl_dim_map_range(dim_map, 4, 2, 1, 1, nparam, -1);
-		isl_dim_map_range(dim_map, 5, 2, 1, 1, nparam, 1);
-	}
+//		isl_dim_map_range(dim_map, 1, 0, 0, 0, 1, 1);
+//		isl_dim_map_range(dim_map, 4, 2, 1, 1, nparam, -1);
+//		isl_dim_map_range(dim_map, 5, 2, 1, 1, nparam, 1);
+
+		isl_dim_map_range(dim_map, edge->start, 0, 0, 0, 1, 1);
+		isl_dim_map_range(dim_map, edge->start + 1, 2, 1, 1, nparam, -1);
+		isl_dim_map_range(dim_map, edge->start + 2, 2, 1, 1, nparam, 1);
+//	}
+//	isl_dim_map_dump(dim_map);
+	isl_basic_map_dump(coef);
+//	isl_basic_set_dump(graph->lp);
 	graph->lp = add_constraints_dim_map(graph->lp, coef, dim_map);
+//	isl_basic_set_dump(graph->lp);
+	}
 
 	return isl_stat_ok;
 }
@@ -2036,9 +2068,13 @@ static isl_stat add_inter_proximity_constraints(struct isl_sched_graph *graph,
 	dim_map = inter_dim_map(ctx, graph, src, dst, offset, -s);
 
 	if (!local) {
-		isl_dim_map_range(dim_map, 1, 0, 0, 0, 1, 1);
-		isl_dim_map_range(dim_map, 4, 2, 1, 1, nparam, -1);
-		isl_dim_map_range(dim_map, 5, 2, 1, 1, nparam, 1);
+//		isl_dim_map_range(dim_map, 1, 0, 0, 0, 1, 1);
+//		isl_dim_map_range(dim_map, 4, 2, 1, 1, nparam, -1);
+//		isl_dim_map_range(dim_map, 5, 2, 1, 1, nparam, 1);
+
+		isl_dim_map_range(dim_map, edge->start, 0, 0, 0, 1, 1);
+		isl_dim_map_range(dim_map, edge->start + 1, 2, 1, 1, nparam, -1);
+		isl_dim_map_range(dim_map, edge->start + 2, 2, 1, 1, nparam, 1);
 	}
 
 	graph->lp = add_constraints_dim_map(graph->lp, coef, dim_map);
@@ -2564,6 +2600,57 @@ static isl_stat add_sum_constraint(struct isl_sched_graph *graph,
 }
 
 /* Add a constraint to graph->lp that equates the value at position
+ * "sum_pos" to the sum of the "n" values starting at "first" for
+ * multiple bounding param functions.
+ */
+static isl_stat add_sepreate_param_sum_constraint(struct isl_sched_graph *graph,
+	int sum_pos, int first, int n, int n_parm_funcs, int stride)
+{
+	int i, k, j;
+	int total;
+
+	total = isl_basic_set_dim(graph->lp, isl_dim_set);
+
+	k = isl_basic_set_alloc_equality(graph->lp);
+	if (k < 0)
+		return isl_stat_error;
+	isl_seq_clr(graph->lp->eq[k], 1 +  total);
+	isl_int_set_si(graph->lp->eq[k][1 + sum_pos], -1);
+
+	for (j = 0; j < n_parm_funcs; ++j) {
+		for (i = 0; i < n; ++i)
+			isl_int_set_si(graph->lp->eq[k][1 + first + i + j*stride], 1);
+	}
+
+	return isl_stat_ok;
+}
+
+/* Add a constraint to graph->lp that equates the value at position
+ * "sum_pos" to the sum of the "n" values starting at "first" for
+ * multiple bounding param functions.
+ */
+static isl_stat add_sepreate_const_sum_constraint(struct isl_sched_graph *graph,
+	int sum_pos, int first, int n_parm_funcs, int stride)
+{
+	int k, j;
+	int total;
+
+	total = isl_basic_set_dim(graph->lp, isl_dim_set);
+
+	k = isl_basic_set_alloc_equality(graph->lp);
+	if (k < 0)
+		return isl_stat_error;
+	isl_seq_clr(graph->lp->eq[k], 1 +  total);
+	isl_int_set_si(graph->lp->eq[k][1 + sum_pos], -1);
+
+	for (j = 0; j < n_parm_funcs; ++j) {
+		isl_int_set_si(graph->lp->eq[k][1 + first  + j*stride], 1);
+	}
+
+	return isl_stat_ok;
+}
+
+/* Add a constraint to graph->lp that equates the value at position
  * "sum_pos" to the sum of the parameter coefficients of all nodes.
  */
 static isl_stat add_param_sum_constraint(struct isl_sched_graph *graph,
@@ -2654,13 +2741,36 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	unsigned total;
 	isl_space *space;
 	int parametric;
-	int param_pos;
+	int param_pos, total_params = 0;
 	int n_eq, n_ineq;
+	int seperate_bounding_functions = 1;
 
 	parametric = ctx->opt->schedule_parametric;
 	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
 	param_pos = 4;
-	total = param_pos + 2 * nparam;
+//	total = param_pos + 2 * nparam;
+	total = param_pos;
+
+	for (i = 0; i < graph->n_edge; ++i) {
+        struct isl_sched_edge *edge = &graph->edge[i];
+		if (is_proximity(edge)) {
+			if(seperate_bounding_functions){
+				edge->start = total;
+				total += 1 + 2 * nparam;
+				edge->end = total;
+				total_params++;
+			}
+			else {
+				edge->start = total;
+				edge->end = total + 1 + 2 * nparam;
+			}
+		}
+	}
+	if (!seperate_bounding_functions) {
+		total_params = 1;
+		total += 2*nparam + 1;
+	}
+
 	for (i = 0; i < graph->n; ++i) {
 		struct isl_sched_node *node = &graph->node[graph->sorted[i]];
 		if (node_update_vmap(node) < 0)
@@ -2682,20 +2792,42 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	graph->lp = isl_basic_set_alloc_space(space, 0, n_eq, n_ineq);
 
-	if (add_sum_constraint(graph, 0, param_pos, 2 * nparam) < 0)
-		return isl_stat_error;
+	if(!seperate_bounding_functions) {
+		if (add_sum_constraint(graph, 0, param_pos + 1, 2 * nparam) < 0)
+			return isl_stat_error;
+//	isl_basic_set_dump(graph->lp);
+		if (add_sepreate_const_sum_constraint(graph, 1, param_pos , 1, 2*nparam + 1 ) < 0)
+			return isl_stat_error;
+//	isl_basic_set_dump(graph->lp);
+	}
+	else {
+//		if (add_sepreate_param_sum_constraint(graph, 0, param_pos  , 2 * nparam + 1, total_params, 2*nparam + 1 ) < 0)
+//			return isl_stat_error;
+		if (add_sepreate_param_sum_constraint(graph, 0, param_pos + 1 , 2 * nparam , total_params, 2*nparam + 1 ) < 0)
+			return isl_stat_error;
+		if (add_sepreate_const_sum_constraint(graph, 1, param_pos , total_params, 2*nparam + 1 ) < 0)
+			return isl_stat_error;
+	}
+//	isl_basic_set_dump(graph->lp);
 	if (parametric && add_param_sum_constraint(graph, 2) < 0)
 		return isl_stat_error;
+//	isl_basic_set_dump(graph->lp);
 	if (add_var_sum_constraint(graph, 3) < 0)
 		return isl_stat_error;
+//	isl_basic_set_dump(graph->lp);
 	if (add_bound_constant_constraints(ctx, graph) < 0)
 		return isl_stat_error;
+//	isl_basic_set_dump(graph->lp);
 	if (add_bound_coefficient_constraints(ctx, graph) < 0)
 		return isl_stat_error;
-	if (add_all_validity_constraints(graph, use_coincidence) < 0)
-		return isl_stat_error;
+//	isl_basic_set_dump(graph->lp);
 	if (add_all_proximity_constraints(graph, use_coincidence) < 0)
 		return isl_stat_error;
+//	isl_basic_set_dump(graph->lp);
+	if (add_all_validity_constraints(graph, use_coincidence) < 0)
+		return isl_stat_error;
+
+	isl_basic_set_dump(graph->lp);
 
 	return isl_stat_ok;
 }
@@ -2808,6 +2940,7 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 		graph->region[i].trivial = trivial;
 	}
 	lp = isl_basic_set_copy(graph->lp);
+	isl_basic_set_dump(lp);
 	sol = isl_tab_basic_set_non_trivial_lexmin(lp, 2, graph->n,
 				       graph->region, &check_conflict, graph);
 	for (i = 0; i < graph->n; ++i)
@@ -5535,6 +5668,7 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 		if (setup_lp(ctx, graph, use_coincidence) < 0)
 			return isl_stat_error;
 		sol = solve_lp(ctx, graph);
+		isl_vec_dump(sol);
 		if (!sol)
 			return isl_stat_error;
 		if (sol->size == 0) {
