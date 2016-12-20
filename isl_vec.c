@@ -262,6 +262,15 @@ static isl_stat check_pos(__isl_keep isl_vec *vec, int pos)
 	return isl_stat_ok;
 }
 
+/* Is the element at position "pos" of "vec" equal to zero?
+ */
+isl_bool isl_vec_element_is_zero(__isl_keep isl_vec *vec, int pos)
+{
+	if (check_pos(vec, pos) < 0)
+		return isl_bool_error;
+	return isl_int_is_zero(vec->el[pos]);
+}
+
 /* Extract the element at position "pos" of "vec".
  */
 __isl_give isl_val *isl_vec_get_element_val(__isl_keep isl_vec *vec, int pos)

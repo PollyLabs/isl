@@ -8027,6 +8027,8 @@ The elements can be changed and inspected using the following functions.
 		int v);
 	__isl_give isl_vec *isl_vec_set_val(
 		__isl_take isl_vec *vec, __isl_take isl_val *v);
+	isl_bool isl_vec_element_is_zero(__isl_keep isl_vec *vec,
+		int pos);
 	int isl_vec_cmp_element(__isl_keep isl_vec *vec1,
 		__isl_keep isl_vec *vec2, int pos);
 
