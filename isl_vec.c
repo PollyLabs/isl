@@ -250,51 +250,52 @@ int isl_vec_size(__isl_keep isl_vec *vec)
 	return vec ? vec->size : -1;
 }
 
+/* Check that "pos" is a valid element position for "vec".
+ */
+static isl_stat check_pos(__isl_keep isl_vec *vec, int pos)
+{
+	if (!vec)
+		return isl_stat_error;
+	if (pos < 0 || pos >= vec->size)
+		isl_die(isl_vec_get_ctx(vec), isl_error_invalid,
+			"position out of range", return isl_stat_error);
+	return isl_stat_ok;
+}
+
 /* Extract the element at position "pos" of "vec".
  */
 __isl_give isl_val *isl_vec_get_element_val(__isl_keep isl_vec *vec, int pos)
 {
 	isl_ctx *ctx;
 
-	if (!vec)
+	if (check_pos(vec, pos) < 0)
 		return NULL;
 	ctx = isl_vec_get_ctx(vec);
-	if (pos < 0 || pos >= vec->size)
-		isl_die(ctx, isl_error_invalid, "position out of range",
-			return NULL);
 	return isl_val_int_from_isl_int(ctx, vec->el[pos]);
 }
 
 __isl_give isl_vec *isl_vec_set_element(__isl_take isl_vec *vec,
 	int pos, isl_int v)
 {
+	if (check_pos(vec, pos) < 0)
+		return isl_vec_free(vec);
 	vec = isl_vec_cow(vec);
 	if (!vec)
 		return NULL;
-	if (pos < 0 || pos >= vec->size)
-		isl_die(vec->ctx, isl_error_invalid, "position out of range",
-			goto error);
 	isl_int_set(vec->el[pos], v);
 	return vec;
-error:
-	isl_vec_free(vec);
-	return NULL;
 }
 
 __isl_give isl_vec *isl_vec_set_element_si(__isl_take isl_vec *vec,
 	int pos, int v)
 {
+	if (check_pos(vec, pos) < 0)
+		return isl_vec_free(vec);
 	vec = isl_vec_cow(vec);
 	if (!vec)
 		return NULL;
-	if (pos < 0 || pos >= vec->size)
-		isl_die(vec->ctx, isl_error_invalid, "position out of range",
-			goto error);
 	isl_int_set_si(vec->el[pos], v);
 	return vec;
-error:
-	isl_vec_free(vec);
-	return NULL;
 }
 
 /* Replace the element at position "pos" of "vec" by "v".
@@ -320,11 +321,8 @@ error:
 int isl_vec_cmp_element(__isl_keep isl_vec *vec1, __isl_keep isl_vec *vec2,
 	int pos)
 {
-	if (!vec1 || !vec2)
+	if (check_pos(vec1, pos) < 0 || check_pos(vec2, pos) < 0)
 		return 0;
-	if (pos < 0 || pos >= vec1->size || pos >= vec2->size)
-		isl_die(isl_vec_get_ctx(vec1), isl_error_invalid,
-			"position out of range", return 0);
 	return isl_int_cmp(vec1->el[pos], vec2->el[pos]);
 }
 
