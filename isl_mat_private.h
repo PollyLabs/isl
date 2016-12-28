@@ -44,6 +44,7 @@ __isl_give isl_mat *isl_mat_scale_down_row(__isl_take isl_mat *mat, int row,
 	isl_int m);
 
 __isl_give isl_vec *isl_mat_get_row(__isl_keep isl_mat *mat, unsigned row);
+__isl_give isl_vec *isl_mat_get_col(__isl_keep isl_mat *mat, unsigned col);
 
 __isl_give isl_mat *isl_mat_lexnonneg_rows(__isl_take isl_mat *mat);
 

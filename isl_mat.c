@@ -2,7 +2,7 @@
  * Copyright 2008-2009 Katholieke Universiteit Leuven
  * Copyright 2010      INRIA Saclay
  * Copyright 2014      Ecole Normale Superieure
- * Copyright 2017      Sven Verdoolaege
+ * Copyright 2016-2017 Sven Verdoolaege
  *
  * Use of this software is governed by the MIT license
  *
@@ -1855,6 +1855,25 @@ __isl_give isl_vec *isl_mat_get_row(__isl_keep isl_mat *mat, unsigned row)
 	if (!v)
 		return NULL;
 	isl_seq_cpy(v->el, mat->row[row], mat->n_col);
+
+	return v;
+}
+
+/* Return a copy of column "col" of "mat" as an isl_vec.
+ */
+__isl_give isl_vec *isl_mat_get_col(__isl_keep isl_mat *mat, unsigned col)
+{
+	int i;
+	isl_vec *v;
+
+	if (check_col_range(mat, col, 1) < 0)
+		return NULL;
+
+	v = isl_vec_alloc(isl_mat_get_ctx(mat), mat->n_row);
+	if (!v)
+		return NULL;
+	for (i = 0; i < mat->n_row; ++i)
+		isl_int_set(v->el[i], mat->row[i][col]);
 
 	return v;
 }
