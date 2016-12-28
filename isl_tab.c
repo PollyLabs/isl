@@ -126,6 +126,7 @@ int isl_tab_extend_cons(struct isl_tab *tab, unsigned n_new)
 
 		tab->mat = isl_mat_extend(tab->mat,
 					tab->n_row + n_new, off + tab->n_col);
+
 		if (!tab->mat)
 			return -1;
 		row_var = isl_realloc_array(tab->mat->ctx, tab->row_var,
@@ -1665,6 +1666,10 @@ int isl_tab_allocate_con(struct isl_tab *tab)
 {
 	int r;
 
+	if (tab->n_row >= tab->mat->n_row)
+	  fprintf(stderr, "[isl_tab]: problematic place %d < %d\n",
+		  tab->n_row, tab->mat->n_row);
+
 	isl_assert(tab->mat->ctx, tab->n_row < tab->mat->n_row, return -1);
 	isl_assert(tab->mat->ctx, tab->n_con < tab->max_con, return -1);
 
@@ -1814,6 +1819,12 @@ int isl_tab_add_row(struct isl_tab *tab, isl_int *line)
 	isl_int *row;
 	isl_int a, b;
 	unsigned off = 2 + tab->M;
+
+	if (tab->n_row >= tab->mat->n_row) {
+		r = isl_tab_extend_cons(tab, 1);
+		if (r < 0)
+			return -1;
+	}
 
 	r = isl_tab_allocate_con(tab);
 	if (r < 0)
