@@ -1966,7 +1966,7 @@ static isl_stat add_intra_proximity_constraints(struct isl_sched_graph *graph,
 	isl_basic_set *coef;
 	struct isl_sched_node *node = edge->src;
 
-	isl_map_dump(map);
+	//isl_map_dump(map);
 
 	coef = intra_coefficients(graph, node, map, !local);
 
@@ -1989,7 +1989,7 @@ static isl_stat add_intra_proximity_constraints(struct isl_sched_graph *graph,
 		isl_dim_map_range(dim_map, edge->start + 2, 2, 1, 1, nparam, 1);
 //	}
 //	isl_dim_map_dump(dim_map);
-	isl_basic_map_dump(coef);
+	//isl_basic_map_dump(coef);
 //	isl_basic_set_dump(graph->lp);
 	graph->lp = add_constraints_dim_map(graph->lp, coef, dim_map);
 //	isl_basic_set_dump(graph->lp);
@@ -2795,10 +2795,8 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	if(!seperate_bounding_functions) {
 		if (add_sum_constraint(graph, 0, param_pos + 1, 2 * nparam) < 0)
 			return isl_stat_error;
-//	isl_basic_set_dump(graph->lp);
 		if (add_sepreate_const_sum_constraint(graph, 1, param_pos , 1, 2*nparam + 1 ) < 0)
 			return isl_stat_error;
-//	isl_basic_set_dump(graph->lp);
 	}
 	else {
 //		if (add_sepreate_param_sum_constraint(graph, 0, param_pos  , 2 * nparam + 1, total_params, 2*nparam + 1 ) < 0)
@@ -2808,16 +2806,12 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 		if (add_sepreate_const_sum_constraint(graph, 1, param_pos , total_params, 2*nparam + 1 ) < 0)
 			return isl_stat_error;
 	}
-//	isl_basic_set_dump(graph->lp);
 	if (parametric && add_param_sum_constraint(graph, 2) < 0)
 		return isl_stat_error;
-//	isl_basic_set_dump(graph->lp);
 	if (add_var_sum_constraint(graph, 3) < 0)
 		return isl_stat_error;
-//	isl_basic_set_dump(graph->lp);
 	if (add_bound_constant_constraints(ctx, graph) < 0)
 		return isl_stat_error;
-//	isl_basic_set_dump(graph->lp);
 	if (add_bound_coefficient_constraints(ctx, graph) < 0)
 		return isl_stat_error;
 //	isl_basic_set_dump(graph->lp);
@@ -2827,7 +2821,7 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	if (add_all_validity_constraints(graph, use_coincidence) < 0)
 		return isl_stat_error;
 
-	isl_basic_set_dump(graph->lp);
+	//isl_basic_set_dump(graph->lp);
 
 	return isl_stat_ok;
 }
@@ -2940,7 +2934,6 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 		graph->region[i].trivial = trivial;
 	}
 	lp = isl_basic_set_copy(graph->lp);
-	isl_basic_set_dump(lp);
 	sol = isl_tab_basic_set_non_trivial_lexmin(lp, 2, graph->n,
 				       graph->region, &check_conflict, graph);
 	for (i = 0; i < graph->n; ++i)

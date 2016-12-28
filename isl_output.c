@@ -626,9 +626,9 @@ static __isl_give isl_printer *print_constraints(__isl_keep isl_basic_map *bmap,
 
 	for (i = bmap->n_eq - 1; i >= 0; --i) {
 
-		p = print_affine(bmap, space, div, p, bmap->eq[i]);
-		p = isl_printer_print_str(p, " = 0 and ");
-		continue;
+		// p = print_affine(bmap, space, div, p, bmap->eq[i]);
+		// p = isl_printer_print_str(p, " = 0 and\n    ");
+		// continue;
 
 		int l = isl_seq_last_non_zero(bmap->eq[i], 1 + total);
 		if (l < 0) {
@@ -647,9 +647,9 @@ static __isl_give isl_printer *print_constraints(__isl_keep isl_basic_map *bmap,
 	}
 	for (i = 0; i < bmap->n_ineq; ++i) {
 
-		p = print_affine(bmap, space, div, p, bmap->ineq[i]);
-		p = isl_printer_print_str(p, " >= 0 and ");
-		continue;
+		// p = print_affine(bmap, space, div, p, bmap->ineq[i]);
+		// p = isl_printer_print_str(p, " >= 0 and\n    ");
+		// continue;
 
 		int l = isl_seq_last_non_zero(bmap->ineq[i], 1 + total);
 		int strict;
