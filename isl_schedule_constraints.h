@@ -9,6 +9,7 @@ enum isl_edge_type {
 	isl_edge_coincidence,
 	isl_edge_condition,
 	isl_edge_conditional_validity,
+	isl_edge_spatial_proximity,
 	isl_edge_proximity,
 	isl_edge_last = isl_edge_proximity,
 	isl_edge_local

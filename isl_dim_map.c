@@ -42,6 +42,31 @@ __isl_give isl_dim_map *isl_dim_map_alloc(isl_ctx *ctx, unsigned len)
 	return dim_map;
 }
 
+__isl_give isl_dim_map *isl_dim_map_copy(isl_ctx *ctx,
+		__isl_keep struct isl_dim_map *dim_map)
+{
+	int i;
+	struct isl_dim_map *new_dim_map;
+	unsigned len;
+
+	if (!ctx || !dim_map)
+		return NULL;
+
+	len = dim_map->len - 1;
+
+	new_dim_map = isl_alloc(ctx, struct isl_dim_map,
+		sizeof(struct isl_dim_map) + len * sizeof(struct isl_dim_map_entry));
+	if (!new_dim_map)
+		return NULL;
+	new_dim_map->len = 1 + len;
+	new_dim_map->m[0].pos = 0;
+	new_dim_map->m[0].sgn = 1;
+	for (i = 0; i < len; ++i)
+		new_dim_map->m[1 + i] = dim_map->m[1 + i];
+
+	return new_dim_map;
+}
+
 void isl_dim_map_range(__isl_keep isl_dim_map *dim_map,
 	unsigned dst_pos, int dst_stride, unsigned src_pos, int src_stride,
 	unsigned n, int sign)
