@@ -67,6 +67,14 @@ __isl_give isl_dim_map *isl_dim_map_copy(isl_ctx *ctx,
 	return new_dim_map;
 }
 
+__isl_null isl_dim_map *isl_dim_map_free(isl_ctx *ctx,
+		__isl_take struct isl_dim_map *dim_map)
+{
+	isl_ctx_deref(ctx);
+	free(dim_map);
+	return NULL;
+}
+
 void isl_dim_map_range(__isl_keep isl_dim_map *dim_map,
 	unsigned dst_pos, int dst_stride, unsigned src_pos, int src_stride,
 	unsigned n, int sign)
