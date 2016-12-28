@@ -1242,7 +1242,7 @@ static isl_stat filter_deps(__isl_take isl_basic_map *bmap,
 {
 	int i;
 	isl_map **map = user;
-	
+
 	isl_space *space = isl_basic_map_get_space(bmap);
 	space = isl_space_range(space);
 	space = isl_space_unwrap(space);
@@ -1267,9 +1267,9 @@ static isl_stat filter_deps(__isl_take isl_basic_map *bmap,
 		}
 		// if (isl_constraint_is_equality(cstr) == isl_bool_true &&
 		//     isl_val_get_num_si(j_coef) == -1 &&
-		// 	isl_val_get_num_si(cst) == 0) {
-		// 		fprintf(stderr, "[isl] gotcha!\n");
-		// 		return isl_stat_ok;
+		//	isl_val_get_num_si(cst) == 0) {
+		//		fprintf(stderr, "[isl] gotcha!\n");
+		//		return isl_stat_ok;
 		// }
 	}
 
@@ -1371,14 +1371,15 @@ static isl_stat extract_edge(__isl_take isl_map *map, void *user)
 					isl_union_map_from_map(tagged);
 	if (data->type == isl_edge_spatial_proximity)
 	{
-		isl_map *fmap = isl_map_empty(isl_map_get_space(tagged));
-		fprintf(stderr, "[isl] adding spatial proximity edge\n");
+		//isl_map *fmap = isl_map_empty(isl_map_get_space(tagged));
+		// fprintf(stderr, "[isl] adding spatial proximity edge\n");
+		// isl_map_foreach_basic_map(tagged, &filter_deps, &fmap);
+		// isl_map_debug(fmap);
+		// graph->edge[graph->n_edge].array_tagged_map =
+					// isl_union_map_from_map(fmap);
 
-		isl_map_foreach_basic_map(tagged, &filter_deps, &fmap);
-
-		isl_map_debug(fmap);
-		graph->edge[graph->n_edge].array_tagged_map = 
-					isl_union_map_from_map(fmap);
+		graph->edge[graph->n_edge].array_tagged_map =
+					isl_union_map_from_map(tagged);
 	}
 
 	edge = graph_find_matching_edge(graph, &graph->edge[graph->n_edge]);
@@ -2188,7 +2189,7 @@ static isl_stat extract_ids_from_tags(__isl_take isl_map *map, isl_id **id1, isl
 
 	if (!map || !id1 || !id2)
 		return isl_stat_error;
-	
+
 	if (isl_map_can_zip(map) != isl_bool_true)
 		return isl_stat_error;
 
@@ -2238,6 +2239,7 @@ static isl_stat add_intra_spatial_proximity_constraints_single(
 	isl_stat r;
 	unsigned nparam = isl_map_dim(map, isl_dim_param);
 	isl_ctx *ctx = isl_map_get_ctx(map);
+	int n_arrays = graph->id_list ? graph->id_list->n : 0;
 
 	if ((r = extract_ids_from_tags(map, &id1, &id2)) < 0)
 		return r;
@@ -2245,8 +2247,8 @@ static isl_stat add_intra_spatial_proximity_constraints_single(
 	start2 = id_list_index_of(graph->id_list, id2);
 	if (start1 < 0 || start2 < 0)
 		return isl_stat_error;
-	start1 = start1 * (2 * nparam + 1) + 6/*#4*/; // count first dimensions for sums...
-	start2 = start2 * (2 * nparam + 1) + 6/*#4*/;
+	start1 = start1 * (2 * nparam + 1) + 2 + 2 * n_arrays;/*#4*/
+	start2 = start2 * (2 * nparam + 1) + 2 + 2 * n_arrays;/*#4*/
 
 	//fprintf(stderr, "[isl] starts %d %d\n", start1, start2);
 
@@ -2262,6 +2264,9 @@ static isl_stat add_intra_spatial_proximity_constraints_single(
 		isl_dim_map_range(dim_map2, start2 + 1, 2, 1, 1, nparam, -1);
 		isl_dim_map_range(dim_map2, start2 + 2, 2, 1, 1, nparam, 1);
 	}
+
+	// fprintf(stderr, "[isl] adding coefficients: ");
+	// isl_basic_set_dump(coef);
 
 	graph->lp = isl_basic_set_extend_constraints(graph->lp,
 			coef->n_eq, coef->n_ineq);
@@ -2294,6 +2299,8 @@ static isl_stat add_intra_spatial_proximity_constraints(
 	// fprintf(stderr, "[isl] processing edge %p %d %d\n", edge,
 	//   isl_union_map_n_map(spatial_proximity), s);
 
+	// fprintf(stderr, "[isl] processing dep map");
+	// isl_map_dump(map);
 	coef = intra_coefficients(graph, node, isl_map_copy(map), !local);
 	offset = coef_var_offset(coef);
 	//fprintf(stderr, "[isl] offset %d\n", offset);
@@ -2396,7 +2403,7 @@ static int add_all_proximity_constraints(struct isl_sched_graph *graph,
 		if (!is_proximity(edge) && !zero)
 			continue;
 
-		isl_map_debug(edge->map);
+		//isl_map_debug(edge->map);
 
 		if (edge->src == edge->dst &&
 		    add_intra_proximity_constraints(graph, edge, 1, zero) < 0)
@@ -2660,7 +2667,7 @@ static isl_stat add_ids_to_hash_table(__isl_take isl_map *map, void *user)
 	ctx = isl_map_get_ctx(map);
 	if (extract_ids_from_tags(map, &id1, &id2) < 0)
 		return isl_stat_error;
-		
+
 	hash = isl_id_get_hash(id1);
 	entry = isl_hash_table_find(ctx, ids, hash, &hash_table_isl_id_eq, id1, 1);
 	if (!entry)
@@ -2672,7 +2679,7 @@ static isl_stat add_ids_to_hash_table(__isl_take isl_map *map, void *user)
 	if (!entry)
 		return isl_stat_error;
 	entry->data = id2;
-	
+
 	return isl_stat_ok;
 }
 
@@ -2680,7 +2687,7 @@ static isl_stat add_ids_to_hash_table(__isl_take isl_map *map, void *user)
 // Count inequalities for each different access.
 // TODO: the construction of graph->id_list should happen in extract_edge;
 //       the problem is that we cannot maintain a hashtable with all names there easily.
-//       Alternatively, do not use a separate list, but store in the graph 
+//       Alternatively, do not use a separate list, but store in the graph
 //       a hash table of pairs (id, index/position)
 // Despite the name, this function also contructs a list of all unique array ids
 // that can be used later for setting up the LP problem.
@@ -2704,7 +2711,7 @@ static isl_stat count_spatial_proximity_constraints(
 
 	n_param = isl_map_dim(graph->edge[0].map, isl_dim_param);
 	ctx = isl_map_get_ctx(graph->edge[0].map);
-	ids = isl_hash_table_alloc(ctx, graph->n_edge);	
+	ids = isl_hash_table_alloc(ctx, graph->n_edge);
 
 	for (i = 0; i < graph->n_edge; ++i)
 	{
@@ -2714,7 +2721,7 @@ static isl_stat count_spatial_proximity_constraints(
 
 		//fprintf(stderr, "[isl] spatial proximity edge found %p!\n", edge->array_tagged_map);
 
-		if (isl_union_map_foreach_map(edge->array_tagged_map, 
+		if (isl_union_map_foreach_map(edge->array_tagged_map,
 				&add_ids_to_hash_table, ids) < 0)
 			goto error;
 	}
@@ -3030,7 +3037,7 @@ static isl_stat add_sum_constraint(struct isl_sched_graph *graph,
 
 // equate sum_pos's variable to sum of n groups of len
 // consecutive variables, each group starting at
-// start + i*stride 
+// start + i*stride
 // len must be <= stride
 static isl_stat add_groups_sum_constraint(
 	struct isl_sched_graph *graph,
@@ -3049,6 +3056,32 @@ static isl_stat add_groups_sum_constraint(
 		for (j = 0; j < len; j++)
 			isl_int_set_si(graph->lp->eq[k][1 + start + stride * i + j], 1);
 
+	return isl_stat_ok;
+}
+
+static isl_stat add_arraywise_sum_constraints(
+	struct isl_sched_graph *graph)
+{
+	int i, nparam, param_pos, n;
+
+	if (!graph || !graph->id_list)
+		return isl_stat_error;
+
+	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
+	n = graph->id_list->n;
+	param_pos = 2 * n + 2;
+
+	for (i = 0; i < n; ++i)
+	{
+		if (add_groups_sum_constraint(graph, i,
+									  param_pos + 1 + i * (2 * nparam + 1),
+									  2 * nparam, 0, 1) < 0)
+			return isl_stat_error;
+		if (add_groups_sum_constraint(graph, n + i,
+									  param_pos + i * (2 * nparam + 1),
+									  1, 0, 1) < 0)
+			return isl_stat_error;
+	}
 	return isl_stat_ok;
 }
 
@@ -3156,6 +3189,17 @@ static isl_stat add_var_sum_constraint(struct isl_sched_graph *graph,
 	return isl_stat_ok;
 }
 
+static void fix_at_zero2(struct isl_sched_graph *graph,
+						 int total, int pos)
+{
+	int k = isl_basic_set_alloc_equality(graph->lp);
+	isl_seq_clr(graph->lp->eq[k],total+1);
+	isl_int_set_si(graph->lp->eq[k][pos],-1);
+	k = isl_basic_set_alloc_equality(graph->lp);
+	isl_seq_clr(graph->lp->eq[k],total+1);
+	isl_int_set_si(graph->lp->eq[k][pos-1],-1);
+}
+
 /* Construct an ILP problem for finding schedule coefficients
  * that result in non-negative, but small dependence distances
  * over all dependences.
@@ -3211,14 +3255,22 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	parametric = ctx->opt->schedule_parametric;
 	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
-	param_pos = 6/*#4*/;
-//	total = param_pos + 2 * nparam;
-	total = param_pos;
 
 	int n_eq2 = 0;
 	int n_ineq2 = 0;
+	int n_ids = 0;
 	count_spatial_proximity_constraints(graph, &n_eq2, &n_ineq2);
-	total += (2 * nparam + 1) * graph->id_list->n;
+	if (graph->id_list)
+		n_ids = graph->id_list->n;
+	param_pos = 2 * n_ids + 2; //6/*#4*/;
+//	total = param_pos + 2 * nparam;
+	total = param_pos;
+	total += (2 * nparam + 1) * n_ids;
+
+	if (!graph->id_list)
+	{
+		fprintf(stderr, "[isl] could not create id_list\n");
+	}
 
 	// Let's ignore plain proximity for now...
 	// Later, we may decide whether we need a separate set of
@@ -3260,7 +3312,7 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 		return isl_stat_error;
 	if (count_bound_coefficient_constraints(ctx, graph, &n_eq, &n_ineq) < 0)
 		return isl_stat_error;
-	
+
 	// TODO: should we add constraints for (spatial) proximity
 	// to n_ineq, n_eq here, or does the _extend function do it for us?
 	// Seems like it can reallocate if necessary, but faster to do it
@@ -3270,67 +3322,36 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	space = isl_space_set_alloc(ctx, 0, total);
 	isl_basic_set_free(graph->lp);
-	n_eq += 2 + parametric;
-	
-	// constraint for sum of m_{A}_0
-	n_eq += 1;
+	// n_eq += 2 + parametric;
 
-// #if 0
+	// constraints for sums
+	n_eq += 2 * n_ids + parametric;
+
+#if 0
 	static int cnt = 0;
 	if (cnt < 3) {
 		fprintf(stderr, "[isl] forcing selection\n");
 		n_eq += 4;
 	}
-// #endif
+#endif
 
 	graph->lp = isl_basic_set_alloc_space(space, 0, n_eq, n_ineq);
 
-// #if 0
+#if 0
 	if (cnt == 0) {
-		int k = isl_basic_set_alloc_equality(graph->lp);
-		isl_seq_clr(graph->lp->eq[k],total+1);
-		isl_int_set_si(graph->lp->eq[k][total],-1);
-		k = isl_basic_set_alloc_equality(graph->lp);
-		isl_seq_clr(graph->lp->eq[k],total+1);
-		isl_int_set_si(graph->lp->eq[k][total-1],-1);
-		k = isl_basic_set_alloc_equality(graph->lp);
-		isl_seq_clr(graph->lp->eq[k],total+1);
-		isl_int_set_si(graph->lp->eq[k][total-2],-1);
-		k = isl_basic_set_alloc_equality(graph->lp);
-		isl_seq_clr(graph->lp->eq[k],total+1);
-		isl_int_set_si(graph->lp->eq[k][total-3],-1);
+		fix_at_zero2(graph, total, total);
+		fix_at_zero2(graph, total, total-2);
 	}
 	else if (cnt == 1) {
-		int k = isl_basic_set_alloc_equality(graph->lp);
-		isl_seq_clr(graph->lp->eq[k],total+1);
-		isl_int_set_si(graph->lp->eq[k][total-4],-1);
-		k = isl_basic_set_alloc_equality(graph->lp);
-		isl_seq_clr(graph->lp->eq[k],total+1);
-		isl_int_set_si(graph->lp->eq[k][total-5],-1);
-		k = isl_basic_set_alloc_equality(graph->lp);
-		isl_seq_clr(graph->lp->eq[k],total+1);
-		isl_int_set_si(graph->lp->eq[k][total-2],-1);
-		k = isl_basic_set_alloc_equality(graph->lp);
-		isl_seq_clr(graph->lp->eq[k],total+1);
-		isl_int_set_si(graph->lp->eq[k][total-3],-1);
+		fix_at_zero2(graph, total, total-2);
+		fix_at_zero2(graph, total, total-4);
 	}
 	else if (cnt == 2) {
-		int k = isl_basic_set_alloc_equality(graph->lp);
-		isl_seq_clr(graph->lp->eq[k],total+1);
-		isl_int_set_si(graph->lp->eq[k][total-4],-1);
-		k = isl_basic_set_alloc_equality(graph->lp);
-		isl_seq_clr(graph->lp->eq[k],total+1);
-		isl_int_set_si(graph->lp->eq[k][total-5],-1);
-		k = isl_basic_set_alloc_equality(graph->lp);
-		isl_seq_clr(graph->lp->eq[k],total+1);
-		isl_int_set_si(graph->lp->eq[k][total-2],-1);
-		k = isl_basic_set_alloc_equality(graph->lp);
-		isl_seq_clr(graph->lp->eq[k],total+1);
-		isl_int_set_si(graph->lp->eq[k][total-3],-1);
+		fix_at_zero2(graph, total, total-2);
+		fix_at_zero2(graph, total, total-4);
 	}
 	++cnt;
-	isl_basic_set_debug(graph->lp);
-// #endif
+#endif
 
 #if 0
 	if(!seperate_bounding_functions) {
@@ -3349,29 +3370,33 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	}
 #endif
 	//if (add_groups_sum_constraint(graph, 0, 5, 2 * nparam, 2 * nparam + 1, graph->id_list->n) < 0)
-	// if (add_groups_sum_constraint(graph, 2, 7/*#5*/ + 2 * nparam + 1, 
-	// 		2 * nparam, 2 * nparam + 1, graph->id_list->n - 1) < 0)
-	// 	return isl_stat_error;
-	if (add_groups_sum_constraint(graph, 0, 7/*#5*/, 
-			2 * nparam, 2 * nparam + 1, graph->id_list->n ) < 0)
+#if 0
+	if (add_groups_sum_constraint(graph, 0, 7/*#5*/ + 2 * nparam + 1,
+			2 * nparam, 2 * nparam + 1, graph->id_list->n - 1) < 0)
 		return isl_stat_error;
-	// if (add_groups_sum_constraint(graph, 3/*#1*/, 6 + 2 * nparam + 1/*#4*/, 
-	// 		1, 2 * nparam + 1, graph->id_list->n - 1) < 0)
-	// 	return isl_stat_error;
-	if (add_groups_sum_constraint(graph, 1/*#1*/, 6/*#4*/, 
-			1, 2 * nparam + 1, graph->id_list->n ) < 0)
+	if (add_groups_sum_constraint(graph, 1, 7/*#5*/,
+			2 * nparam, 2 * nparam + 1, graph->id_list->n - 1) < 0)
+		return isl_stat_error;
+	if (add_groups_sum_constraint(graph, 2/*#1*/, 6/*#4*/ + 2 * nparam + 1,
+			1, 2 * nparam + 1, graph->id_list->n - 1) < 0)
+		return isl_stat_error;
+	if (add_groups_sum_constraint(graph, 3/*#1*/, 6/*#4*/,
+			1, 2 * nparam + 1, graph->id_list->n - 1) < 0)
+		return isl_stat_error;
+#endif
+	if (add_arraywise_sum_constraints(graph) < 0)
 		return isl_stat_error;
 
-	if (parametric && add_param_sum_constraint(graph, 4/*#2*/) < 0)
+	if (parametric && add_param_sum_constraint(graph, param_pos - 2/*#2*/) < 0)
 		return isl_stat_error;
-	if (add_var_sum_constraint(graph, 5/*#3*/) < 0)
+	if (add_var_sum_constraint(graph, param_pos - 1/*#3*/) < 0)
 		return isl_stat_error;
 	if (add_bound_constant_constraints(ctx, graph) < 0)
 		return isl_stat_error;
 	if (add_bound_coefficient_constraints(ctx, graph) < 0)
 		return isl_stat_error;
 
-	isl_basic_set_debug(graph->lp);
+	//isl_basic_set_debug(graph->lp);
 
 #if 0
 	if (add_all_proximity_constraints(graph, use_coincidence) < 0)
@@ -3381,8 +3406,21 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 		return isl_stat_error;
 	if (add_all_validity_constraints(graph, use_coincidence) < 0)
 		return isl_stat_error;
+#if 0
+	//int elems[] = {1,0,1,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1};
+	int elems[] = {1,0,0,1,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1};
 
-	//isl_basic_set_dump(graph->lp);
+	isl_vec *vec = isl_vec_alloc(ctx, sizeof(elems) / sizeof(int));
+	for (int i = 0; i < sizeof(elems) / sizeof(int); ++i)
+	{
+		vec = isl_vec_set_element_si(vec, i, elems[i]);
+	}
+	isl_bool b = isl_basic_set_contains(graph->lp, vec);
+	fprintf(stderr, "[isl] LP contrains result vector %d\n", b);
+	isl_vec_free(vec);
+#endif
+
+	graph->lp = isl_basic_set_simplify(graph->lp);
 
 	return isl_stat_ok;
 }
@@ -3482,7 +3520,9 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 	int i;
 	isl_vec *sol;
 	isl_basic_set *lp;
+	int n_op;
 
+	n_op = graph->id_list ? 2 * graph->id_list->n : 2;
 	for (i = 0; i < graph->n; ++i) {
 		struct isl_sched_node *node = &graph->node[i];
 		isl_mat *trivial;
@@ -3495,7 +3535,8 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 		graph->region[i].trivial = trivial;
 	}
 	lp = isl_basic_set_copy(graph->lp);
-	sol = isl_tab_basic_set_non_trivial_lexmin(lp, 2, graph->n,
+	isl_basic_set_debug(lp);
+	sol = isl_tab_basic_set_non_trivial_lexmin(lp, n_op/*#2*/, graph->n,
 				       graph->region, &check_conflict, graph);
 	for (i = 0; i < graph->n; ++i)
 		isl_mat_free(graph->region[i].trivial);
@@ -3762,7 +3803,7 @@ static int update_edge(struct isl_sched_graph *graph,
 			goto error;
 	}
 	if (edge->array_tagged_map) {
-		edge->array_tagged_map = 
+		edge->array_tagged_map =
 			intersect_domains(edge->array_tagged_map, id);
 		if (!edge->array_tagged_map)
 			goto error;
@@ -4757,6 +4798,7 @@ static isl_stat setup_carry_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	unsigned total;
 	int n_eq, n_ineq;
 
+
 	total = 3 + n_edge;
 	for (i = 0; i < graph->n; ++i) {
 		struct isl_sched_node *node = &graph->node[graph->sorted[i]];
@@ -4781,8 +4823,9 @@ static isl_stat setup_carry_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	isl_int_set_si(graph->lp->eq[k][0], -n_edge);
 	isl_int_set_si(graph->lp->eq[k][1], 1);
 	for (i = 0; i < n_edge; ++i)
-		isl_int_set_si(graph->lp->eq[k][6/*#4*/ + i], 1);
+		isl_int_set_si(graph->lp->eq[k][param_pos/*#4*/ + i], 1);
 
+	// FIXME: these should be replaced by array-wise functions.
 	if (add_param_sum_constraint(graph, 1) < 0)
 		return isl_stat_error;
 	if (add_var_sum_constraint(graph, 2) < 0)
@@ -4793,7 +4836,7 @@ static isl_stat setup_carry_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 		if (k < 0)
 			return isl_stat_error;
 		isl_seq_clr(graph->lp->ineq[k], 1 + total);
-		isl_int_set_si(graph->lp->ineq[k][6/*#4*/ + i], -1);
+		isl_int_set_si(graph->lp->ineq[k][param_pos/*#4*/ + i], -1);
 		isl_int_set_si(graph->lp->ineq[k][0], 1);
 	}
 
