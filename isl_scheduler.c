@@ -403,7 +403,7 @@ struct isl_sched_graph {
 
 	int max_weight;
 
-	isl_id_list *id_list;
+	isl_id_list *id_list; // used by setup_lp in spatial proximity mode
 };
 
 /* Initialize node_table based on the list of nodes.
@@ -2235,11 +2235,15 @@ static isl_stat add_intra_spatial_proximity_constraints_single(
 	isl_dim_map *dim_map = data->dim_map;
 	isl_dim_map *dim_map1, *dim_map2;
 	isl_id *id1, *id2;
-	int start1, start2;
+	int start1, start2, n_arrays;
 	isl_stat r;
 	unsigned nparam = isl_map_dim(map, isl_dim_param);
 	isl_ctx *ctx = isl_map_get_ctx(map);
-	int n_arrays = graph->id_list ? graph->id_list->n : 0;
+
+	if (!graph->id_list)
+		return isl_stat_error;
+
+	n_arrays = graph->id_list->n;
 
 	if ((r = extract_ids_from_tags(map, &id1, &id2)) < 0)
 		return r;
@@ -2341,7 +2345,7 @@ struct add_spatial_constraints_data {
 static isl_stat add_spatial_proximity_constraints_single(
 	__isl_take isl_map *map, void *user)
 {
-	int start;
+	int start, n_arrays;
 	isl_id *id1, *id2;
 	isl_stat r;
 	struct add_spatial_constraints_data *data = user;
@@ -2350,7 +2354,10 @@ static isl_stat add_spatial_proximity_constraints_single(
 	isl_dim_map *dim_map = data->dim_map;
 	unsigned nparam = isl_map_dim(map, isl_dim_param);
 	isl_ctx *ctx = isl_map_get_ctx(map);
-	int n_arrays = graph->id_list ? graph->id_list->n : 0;
+
+	if (!graph->id_list)
+		return isl_stat_error;
+	n_arrays = graph->id_list->n;
 
 	if ((r = extract_ids_from_tags(map, &id1, &id2)) < 0)
 		return r;
@@ -2794,7 +2801,7 @@ static isl_stat count_spatial_proximity_constraints(
 	if (!graph || !n_ineq)
 		return isl_stat_error;
 
-	if (graph->n_edge == 0) // FIXME: graph->id_list remains NULL,
+	if (graph->n_edge == 0)
 		return isl_stat_ok;
 
 	n_param = isl_map_dim(graph->edge[0].map, isl_dim_param);
@@ -3155,8 +3162,9 @@ static isl_stat add_arraywise_sum_constraints(
 {
 	int i, nparam, param_pos, n;
 
-	if (!graph || !graph->id_list)
-		return isl_stat_error;
+	/* assuming there are no (spatial) proximity edges at all */
+	if (!graph->id_list)
+		return isl_stat_ok;
 
 	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
 	n = graph->id_list->n;
@@ -3357,11 +3365,6 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 //	total = param_pos + 2 * nparam;
 	total = param_pos;
 	total += (2 * nparam + 1) * n_ids;
-
-	if (!graph->id_list)
-	{
-		fprintf(stderr, "[isl] could not create id_list\n");
-	}
 
 	// Let's ignore plain proximity for now...
 	// Later, we may decide whether we need a separate set of
@@ -3611,9 +3614,10 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 	int i;
 	isl_vec *sol;
 	isl_basic_set *lp;
-	int n_op;
+	int n_op = 0;
 
-	n_op = graph->id_list ? 2 * graph->id_list->n : 2;
+	if (graph->id_list)
+		n_op = graph->id_list->n * 2;
 	for (i = 0; i < graph->n; ++i) {
 		struct isl_sched_node *node = &graph->node[i];
 		isl_mat *trivial;
