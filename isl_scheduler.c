@@ -6810,7 +6810,8 @@ static __isl_give isl_schedule_constraints *add_non_conditional_constraints(
 
 	for (t = isl_edge_first; t <= isl_edge_last; ++t) {
 		if (t == isl_edge_condition ||
-		    t == isl_edge_conditional_validity)
+		    t == isl_edge_conditional_validity ||
+			t == isl_edge_spatial_proximity)
 			continue;
 		if (!is_type(edge, t))
 			continue;
@@ -6852,6 +6853,22 @@ static __isl_give isl_schedule_constraints *add_conditional_constraints(
 	return sc;
 }
 
+static __isl_give isl_schedule_constraints *add_array_tagged_constraints(
+	struct isl_sched_edge *edge, __isl_keep isl_union_map *umap,
+	__isl_take isl_schedule_constraints *sc)
+{
+	isl_union_map *tagged = isl_union_map_copy(edge->array_tagged_map);
+	tagged = isl_union_map_zip(tagged);
+	tagged = isl_union_map_apply_domain(tagged, isl_union_map_copy(umap));
+	tagged = isl_union_map_zip(tagged);
+	sc->constraint[isl_edge_spatial_proximity] = isl_union_map_union(
+		sc->constraint[isl_edge_spatial_proximity], tagged);
+	if (!sc->constraint[isl_edge_spatial_proximity])
+		return isl_schedule_constraints_free(sc);
+
+	return sc;
+}
+
 /* Given a mapping "cluster_map" from the original instances to
  * the cluster instances, add schedule constraints on the clusters
  * to "sc" corresponding to the original constraints represented by "edge".
@@ -6885,7 +6902,8 @@ static __isl_give isl_schedule_constraints *collect_edge_constraints(
 	sc = add_non_conditional_constraints(edge, umap, sc);
 	isl_union_map_free(umap);
 
-	if (!sc || (!is_condition(edge) && !is_conditional_validity(edge)))
+	if (!sc || (!is_condition(edge) && !is_conditional_validity(edge) &&
+				!is_spatial_proximity(edge)))
 		return sc;
 
 	space = isl_space_domain(isl_map_get_space(edge->map));
@@ -6898,7 +6916,10 @@ static __isl_give isl_schedule_constraints *collect_edge_constraints(
 	umap2 = isl_union_map_intersect_domain(umap2, uset);
 	umap = isl_union_map_product(umap1, umap2);
 
-	sc = add_conditional_constraints(edge, umap, sc);
+	if (is_spatial_proximity(edge))
+		sc = add_array_tagged_constraints(edge, umap, sc);
+	else
+		sc = add_conditional_constraints(edge, umap, sc);
 
 	isl_union_map_free(umap);
 	return sc;
