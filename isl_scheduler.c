@@ -1399,6 +1399,81 @@ static isl_stat extract_edge(__isl_take isl_map *map, void *user)
 	return graph_edge_table_add(ctx, graph, data->type, edge);
 }
 
+struct count_id_occurrences_data
+{
+	isl_id *id;
+	int count;
+};
+
+static int id_list_index_of(isl_id_list *, isl_id *);
+static isl_stat extract_ids_from_tags(isl_map *, isl_id **, isl_id **);
+
+static isl_stat count_id_occurrences(__isl_keep isl_map *map, void *user)
+{
+	struct count_id_occurrences_data *data = user;
+	isl_space *space = isl_map_get_space(map);
+	isl_id *id1, *id2;
+
+	extract_ids_from_tags(map, &id1, &id2);
+	data->count += (id1 == data->id);
+	data->count += (id2 == data->id);
+	return isl_stat_ok;
+}
+
+static int compare_ids_by_ref_count(__isl_keep isl_id *id1,
+	__isl_keep isl_id *id2, void *user)
+{
+	isl_union_map *umap = user;
+
+	if (id1 == id2)
+		return 0;
+	if (!umap)
+		return 0;
+
+	struct count_id_occurrences_data ref_count1 = { id1, 0 };
+	struct count_id_occurrences_data ref_count2 = { id2, 0 };
+	if (isl_union_map_foreach_map(umap, &count_id_occurrences,
+			&ref_count1) < 0)
+		return 0;
+	if (isl_union_map_foreach_map(umap, &count_id_occurrences,
+			&ref_count2) < 0)
+		return 0;
+	return ref_count2.count - ref_count1.count;
+}
+
+static isl_stat add_unique_ids_to_list(__isl_take isl_map *map,
+	void *user)
+{
+	isl_id *id1, *id2;
+	isl_id_list *list = *(isl_id_list **) user;
+
+	if (extract_ids_from_tags(map, &id1, &id2) < 0)
+		return isl_stat_error;
+
+	if (id_list_index_of(list, id1) < 0)
+		list = isl_id_list_add(list, id1);
+	if (id_list_index_of(list, id2) < 0)
+		list = isl_id_list_add(list, id2);
+	*(isl_id_list **) user = list;
+	return isl_stat_ok;
+}
+
+static isl_stat init_id_list(struct isl_sched_graph *graph,
+	__isl_keep isl_union_map *spatial_proximity)
+{
+	isl_ctx *ctx;
+
+	isl_id_list_free(graph->id_list);
+	ctx = isl_union_map_get_ctx(spatial_proximity);
+	graph->id_list = isl_id_list_alloc(ctx, 1);
+	if ( isl_union_map_foreach_map(spatial_proximity, &add_unique_ids_to_list,
+			&graph->id_list) < 0)
+		return isl_stat_error;
+	graph->id_list = isl_id_list_sort(graph->id_list,
+		&compare_ids_by_ref_count, spatial_proximity);
+	return isl_stat_ok;
+}
+
 /* Initialize the schedule graph "graph" from the schedule constraints "sc".
  *
  * The context is included in the domain before the nodes of
@@ -1463,6 +1538,8 @@ static isl_stat graph_init(struct isl_sched_graph *graph,
 		if (r < 0)
 			return isl_stat_error;
 	}
+	if (init_id_list(graph, sc->constraint[isl_edge_spatial_proximity]) < 0)
+		return isl_stat_error;
 
 	return isl_stat_ok;
 }
@@ -2184,22 +2261,33 @@ static int force_zero(struct isl_sched_edge *edge, int use_coincidence)
 
 static isl_stat extract_ids_from_tags(__isl_take isl_map *map, isl_id **id1, isl_id **id2)
 {
-	isl_map *tags;
+	// isl_map *tags;
 	isl_space *space;
 
 	if (!map || !id1 || !id2)
 		return isl_stat_error;
 
-	if (isl_map_can_zip(map) != isl_bool_true)
+	space = isl_map_get_space(map);
+	isl_map_free(map);
+	if (isl_space_can_zip(space) != isl_bool_true)
 		return isl_stat_error;
-
-	tags = isl_map_zip(map);
-	tags = isl_set_unwrap(isl_map_range(tags));
-	space = isl_map_get_space(tags);
+	space = isl_space_zip(space);
+	space = isl_space_range(space);
+	space = isl_space_unwrap(space);
 	*id1 = isl_space_get_tuple_id(space, isl_dim_in);
 	*id2 = isl_space_get_tuple_id(space, isl_dim_out);
 	isl_space_free(space);
-	isl_map_free(tags);
+
+	// if (isl_map_can_zip(map) != isl_bool_true)
+	// 	return isl_stat_error;
+
+	// tags = isl_map_zip(map);
+	// tags = isl_set_unwrap(isl_map_range(tags));
+	// space = isl_map_get_space(tags);
+	// *id1 = isl_space_get_tuple_id(space, isl_dim_in);
+	// *id2 = isl_space_get_tuple_id(space, isl_dim_out);
+	// isl_space_free(space);
+	// isl_map_free(tags);
 
 	return isl_stat_ok;
 }
@@ -2307,7 +2395,6 @@ static isl_stat add_intra_spatial_proximity_constraints(
 	// isl_map_dump(map);
 	coef = intra_coefficients(graph, node, isl_map_copy(map), !local);
 	offset = coef_var_offset(coef);
-	//fprintf(stderr, "[isl] offset %d\n", offset);
 	coef = isl_basic_set_transform_dims(coef, isl_dim_set,
 			offset, isl_mat_transpose(isl_mat_copy(node->vmap)));
 	if (!coef)
@@ -3355,12 +3442,19 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	parametric = ctx->opt->schedule_parametric;
 	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
 
-	int n_eq2 = 0;
-	int n_ineq2 = 0;
+	// int n_eq2 = 0;
+	// int n_ineq2 = 0;
 	int n_ids = 0;
-	count_spatial_proximity_constraints(graph, &n_eq2, &n_ineq2);
+	// count_spatial_proximity_constraints(graph, &n_eq2, &n_ineq2);
 	if (graph->id_list)
+	{
 		n_ids = graph->id_list->n;
+	} else {
+		fprintf(stderr, "[isl] WARNING: EMPTY ID_LIST!\n\n\n");
+	}
+
+	isl_id_list_dump(graph->id_list);
+
 	param_pos = 2 * n_ids + 2; //6/*#4*/;
 //	total = param_pos + 2 * nparam;
 	total = param_pos;
@@ -3630,7 +3724,7 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 		graph->region[i].trivial = trivial;
 	}
 	lp = isl_basic_set_copy(graph->lp);
-	isl_basic_set_debug(lp);
+	//isl_basic_set_debug(lp);
 	sol = isl_tab_basic_set_non_trivial_lexmin(lp, n_op/*#2*/, graph->n,
 				       graph->region, &check_conflict, graph);
 	for (i = 0; i < graph->n; ++i)
@@ -4343,6 +4437,8 @@ static int extract_sub_graph(isl_ctx *ctx, struct isl_sched_graph *graph,
 	sub->max_row = graph->max_row;
 	sub->n_total_row = graph->n_total_row;
 	sub->band_start = graph->band_start;
+
+	sub->id_list = isl_id_list_copy(graph->id_list);
 
 	return 0;
 }
