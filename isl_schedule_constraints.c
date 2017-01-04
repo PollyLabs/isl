@@ -44,6 +44,7 @@ struct isl_schedule_constraints {
 	isl_set *context;
 
 	isl_union_map *constraint[isl_edge_last + 1];
+	isl_union_map *counted_accesses;
 };
 
 __isl_give isl_schedule_constraints *isl_schedule_constraints_copy(
@@ -68,6 +69,9 @@ __isl_give isl_schedule_constraints *isl_schedule_constraints_copy(
 		if (!sc_copy->constraint[i])
 			return isl_schedule_constraints_free(sc_copy);
 	}
+	sc_copy->counted_accesses = isl_union_map_copy(sc->counted_accesses);
+	if (!sc_copy->counted_accesses)
+		return isl_schedule_constraints_free(sc_copy);
 
 	return sc_copy;
 }
@@ -107,6 +111,8 @@ static __isl_give isl_schedule_constraints *isl_schedule_constraints_init(
 		if (!sc->constraint[i])
 			sc->domain = isl_union_set_free(sc->domain);
 	}
+	if (!sc->counted_accesses)
+		sc->counted_accesses = isl_union_map_copy(empty);
 	isl_union_map_free(empty);
 
 	if (!sc->domain || !sc->context)
@@ -136,6 +142,24 @@ __isl_give isl_schedule_constraints *isl_schedule_constraints_on_domain(
 	return isl_schedule_constraints_init(sc);
 error:
 	isl_union_set_free(domain);
+	return NULL;
+}
+
+__isl_give isl_schedule_constraints *
+isl_schedule_constraints_set_counted_accesses(
+	__isl_take isl_schedule_constraints *sc,
+	__isl_take isl_union_map *counted_accesses)
+{
+	if (!sc || !counted_accesses)
+		goto error;
+
+	isl_union_map_free(sc->counted_accesses);
+	sc->counted_accesses = counted_accesses;
+	return sc;
+
+error:
+	isl_schedule_constraints_free(sc);
+	isl_union_map_free(counted_accesses);
 	return NULL;
 }
 
@@ -238,6 +262,25 @@ isl_schedule_constraints_set_conditional_validity(
 	return sc;
 }
 
+__isl_give isl_schedule_constraints *
+isl_schedule_constraints_set_spatial_proximity(
+	__isl_take isl_schedule_constraints *sc,
+	__isl_take isl_union_map *spatial_proximity)
+{
+	if (!sc || !spatial_proximity)
+		goto error;
+
+	isl_union_map_free(sc->constraint[isl_edge_spatial_proximity]);
+	sc->constraint[isl_edge_spatial_proximity] = spatial_proximity;
+
+	return sc;
+error:
+	isl_schedule_constraints_free(sc);
+	isl_union_map_free(spatial_proximity);
+	return NULL;
+}
+
+
 __isl_null isl_schedule_constraints *isl_schedule_constraints_free(
 	__isl_take isl_schedule_constraints *sc)
 {
@@ -250,6 +293,7 @@ __isl_null isl_schedule_constraints *isl_schedule_constraints_free(
 	isl_set_free(sc->context);
 	for (i = isl_edge_first; i <= isl_edge_last; ++i)
 		isl_union_map_free(sc->constraint[i]);
+	isl_union_map_free(sc->counted_accesses);
 
 	free(sc);
 
@@ -327,6 +371,14 @@ __isl_give isl_union_map *isl_schedule_constraints_get_conditional_validity(
 	return isl_schedule_constraints_get(sc, isl_edge_conditional_validity);
 }
 
+/* Return the spatial proximity constraints of "sc".
+ */
+__isl_give isl_union_map *isl_schedule_constraints_get_spatial_proximity(
+	__isl_keep isl_schedule_constraints *sc)
+{
+	return isl_schedule_constraints_get(sc, isl_edge_spatial_proximity);
+}
+
 /* Return the conditions for the conditional validity constraints of "sc".
  */
 __isl_give isl_union_map *
@@ -334,6 +386,18 @@ isl_schedule_constraints_get_conditional_validity_condition(
 	__isl_keep isl_schedule_constraints *sc)
 {
 	return isl_schedule_constraints_get(sc, isl_edge_condition);
+}
+
+/* Return the access relations for "sc".
+ */
+__isl_give isl_union_map *
+isl_schedule_constraints_get_counted_accesses(
+	__isl_keep isl_schedule_constraints *sc)
+{
+	if (!sc)
+		return NULL;
+
+	return isl_union_map_copy(sc->counted_accesses);
 }
 
 /* Add "c" to the constraints of type "type" in "sc".
@@ -439,6 +503,11 @@ __isl_give isl_schedule_constraints *isl_schedule_constraints_apply(
 		if (!sc->constraint[i])
 			goto error;
 	}
+
+	sc->counted_accesses = apply(sc->counted_accesses, umap, 1);
+	if (!sc->counted_accesses)
+		goto error;
+
 	sc->domain = isl_union_set_apply(sc->domain, umap);
 	if (!sc->domain)
 		return isl_schedule_constraints_free(sc);
@@ -461,9 +530,11 @@ enum isl_sc_key {
 	isl_sc_key_coincidence = isl_edge_coincidence,
 	isl_sc_key_condition = isl_edge_condition,
 	isl_sc_key_conditional_validity = isl_edge_conditional_validity,
+	isl_sc_key_spatial_proximity = isl_edge_spatial_proximity,
 	isl_sc_key_proximity = isl_edge_proximity,
 	isl_sc_key_domain,
 	isl_sc_key_context,
+	isl_sc_key_counted_accesses,
 	isl_sc_key_end
 };
 
@@ -475,9 +546,11 @@ static char *key_str[] = {
 	[isl_sc_key_coincidence] = "coincidence",
 	[isl_sc_key_condition] = "condition",
 	[isl_sc_key_conditional_validity] = "conditional_validity",
+	[isl_sc_key_spatial_proximity] = "spatial_proximity",
 	[isl_sc_key_proximity] = "proximity",
 	[isl_sc_key_domain] = "domain",
 	[isl_sc_key_context] = "context",
+	[isl_sc_key_counted_accesses] = "counted_accesses",
 };
 
 /* Print a key, value pair for the edge of type "type" in "sc" to "p".
@@ -517,6 +590,11 @@ __isl_give isl_printer *isl_printer_print_schedule_constraints(
 	p = print_constraint(p, sc, isl_edge_coincidence);
 	p = print_constraint(p, sc, isl_edge_condition);
 	p = print_constraint(p, sc, isl_edge_conditional_validity);
+	p = print_constraint(p, sc, isl_edge_spatial_proximity);
+	p = isl_printer_yaml_next(p);
+	p = isl_printer_print_str(p, key_str[isl_sc_key_counted_accesses]);
+	p = isl_printer_yaml_next(p);
+	p = isl_printer_print_union_map(p, sc->counted_accesses);
 	p = isl_printer_yaml_end_mapping(p);
 
 	return p;
@@ -617,6 +695,7 @@ __isl_give isl_schedule_constraints *isl_stream_read_schedule_constraints(
 		isl_set *context;
 		isl_union_set *domain;
 		isl_union_map *constraints;
+		isl_union_map *counted_accesses;
 
 		key = get_key(s);
 		if (isl_stream_yaml_next(s) < 0)
@@ -638,6 +717,14 @@ __isl_give isl_schedule_constraints *isl_stream_read_schedule_constraints(
 			if (!sc)
 				return NULL;
 			break;
+		case isl_sc_key_counted_accesses:
+			counted_accesses = read_union_map(s);
+			sc = isl_schedule_constraints_set_counted_accesses(sc,
+					counted_accesses);
+			if (!sc)
+				return NULL;
+			break;
+			
 		default:
 			constraints = read_union_map(s);
 			sc = isl_schedule_constraints_set(sc, key, constraints);
@@ -719,6 +806,8 @@ isl_schedule_constraints_align_params(__isl_take isl_schedule_constraints *sc)
 		if (!sc->constraint[i])
 			space = isl_space_free(space);
 	}
+	sc->counted_accesses = isl_union_map_align_params(sc->counted_accesses,
+		isl_space_copy(space));
 	sc->context = isl_set_align_params(sc->context, isl_space_copy(space));
 	sc->domain = isl_union_set_align_params(sc->domain, space);
 	if (!sc->context || !sc->domain)

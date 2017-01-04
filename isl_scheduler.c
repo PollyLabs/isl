@@ -311,6 +311,128 @@ static int is_spatial_proximity(struct isl_sched_edge *edge)
 	return is_type(edge, isl_edge_spatial_proximity);
 }
 
+struct id_rank_table_entry
+{
+	isl_id *id;
+	int rank;
+	int multiplicity;
+	int total_multiplicity;
+};
+
+static int eq_id_rank_table_entry(const void *e1, const void *e2)
+{
+	const struct id_rank_table_entry *entry1 = e1;
+	const struct id_rank_table_entry *entry2 = e2;
+	return entry1->id == entry2->id;
+}
+
+static int cmp_id_rank_table_entry(const struct id_rank_table_entry *entry1,
+	const struct id_rank_table_entry *entry2)
+{
+	int diff_rank, diff_multiplicity, diff_total_multiplicity;
+	if (entry1->id == entry2->id)
+		return 0;
+
+	diff_rank = entry2->rank - entry1->rank;
+	diff_multiplicity = entry2->multiplicity - entry1->multiplicity;
+	diff_total_multiplicity =
+		entry2->total_multiplicity - entry1->total_multiplicity;
+
+	if (diff_rank != 0)
+		return diff_rank;
+	if (diff_multiplicity != 0)
+		return diff_multiplicity;
+	return diff_total_multiplicity;
+}
+
+static __isl_give struct isl_hash_table *id_rank_table_init(isl_ctx *ctx,
+	int min_size)
+{
+	return isl_hash_table_alloc(ctx, min_size);
+}
+
+static isl_stat id_rank_table_free_entry(void **entry,
+	void *user)
+{
+	struct id_rank_table_entry *id_entry =
+		*(struct id_rank_table_entry **) entry;
+	free(id_entry);
+	id_entry = NULL;
+	(void) user;
+	return isl_stat_ok;
+}
+
+static __isl_null struct isl_hash_table *id_rank_table_free(isl_ctx *ctx,
+	__isl_take struct isl_hash_table *table)
+{
+	if (!table)
+		return NULL;
+	isl_hash_table_foreach(ctx, table, &id_rank_table_free_entry, NULL);
+	isl_hash_table_free(ctx, table);
+}
+
+static struct id_rank_table_entry *id_rank_table_find(
+	__isl_keep struct isl_hash_table *table, isl_id *id, int reserve)
+{
+	struct id_rank_table_entry *id_entry;
+	uint32_t hash = isl_id_get_hash(id);
+	isl_ctx *ctx = isl_id_get_ctx(id);
+	struct id_rank_table_entry pattern = { id };
+	struct isl_hash_table_entry *entry = isl_hash_table_find(ctx, table, hash,
+		&eq_id_rank_table_entry, &pattern, 0);
+	if (!entry && !reserve)
+		return NULL;
+	if (!entry)
+	{
+		entry = isl_hash_table_find(ctx, table, hash,
+			&eq_id_rank_table_entry, &pattern, 1);
+		id_entry = isl_alloc(ctx, struct id_rank_table_entry,
+			sizeof(struct id_rank_table_entry));
+		id_entry->id = id;
+		id_entry->rank = 0;
+		id_entry->multiplicity = 0;
+		id_entry->total_multiplicity = 0;
+		entry->data = id_entry;
+	}
+
+	return (struct id_rank_table_entry *) entry->data;
+}
+
+static isl_stat id_rank_table_element_reset(void **entry,
+	void *user)
+{
+	struct id_rank_table_entry *id_entry =
+		*(struct id_rank_table_entry **) entry;
+	(void) user;
+	id_entry->rank = 0;
+	return isl_stat_ok;
+}
+
+static isl_stat id_rank_table_reset(isl_ctx *ctx,
+	__isl_keep struct isl_hash_table *table)
+{
+	return isl_hash_table_foreach(ctx, table, &id_rank_table_element_reset,
+		NULL);
+}
+
+static isl_stat id_rank_table_element_dump(void **entry,
+	void *user)
+{
+	struct id_rank_table_entry *id_entry =
+		*(struct id_rank_table_entry **) entry;
+	(void) user;
+	isl_id_dump(id_entry->id);
+	fprintf(stderr, "-> %d\n", id_entry->rank);
+	return isl_stat_ok;
+}
+
+static isl_stat id_rank_table_dump(isl_ctx *ctx,
+	__isl_keep struct isl_hash_table *table)
+{
+	return isl_hash_table_foreach(ctx, table, &id_rank_table_element_dump,
+		NULL);
+}
+
 /* Internal information about the dependence graph used during
  * the construction of the schedule.
  *
@@ -404,6 +526,8 @@ struct isl_sched_graph {
 	int max_weight;
 
 	isl_id_list *id_list; // used by setup_lp in spatial proximity mode
+	isl_union_map *counted_accesses;
+	struct isl_hash_table *id_rank_table;
 };
 
 /* Initialize node_table based on the list of nodes.
@@ -659,6 +783,7 @@ static int graph_alloc(isl_ctx *ctx, struct isl_sched_graph *graph,
 	graph->intra_hmap = isl_map_to_basic_set_alloc(ctx, 2 * n_edge);
 	graph->intra_hmap_param = isl_map_to_basic_set_alloc(ctx, 2 * n_edge);
 	graph->inter_hmap = isl_map_to_basic_set_alloc(ctx, 2 * n_edge);
+	graph->counted_accesses = NULL;
 
 	if (!graph->node || !graph->region || (graph->n_edge && !graph->edge) ||
 	    !graph->sorted)
@@ -708,6 +833,15 @@ static void graph_free(isl_ctx *ctx, struct isl_sched_graph *graph)
 		isl_hash_table_free(ctx, graph->edge_table[i]);
 	isl_hash_table_free(ctx, graph->node_table);
 	isl_basic_set_free(graph->lp);
+	isl_union_map_free(graph->counted_accesses);
+
+#if 0
+	if (graph->id_list)
+		free(graph->id_list);
+#endif
+
+	if (graph->id_rank_table)
+		id_rank_table_free(ctx, graph->id_rank_table);
 }
 
 /* For each "set" on which this function is called, increment
@@ -1451,10 +1585,25 @@ static isl_stat add_unique_ids_to_list(__isl_take isl_map *map,
 		return isl_stat_error;
 
 	if (id_list_index_of(list, id1) < 0)
-		list = isl_id_list_add(list, id1);
+		list = isl_id_list_add(list, isl_id_copy(id1));
 	if (id_list_index_of(list, id2) < 0)
-		list = isl_id_list_add(list, id2);
+		list = isl_id_list_add(list, isl_id_copy(id2));
 	*(isl_id_list **) user = list;
+	return isl_stat_ok;
+}
+
+static isl_stat graph_init_id_rank_table(isl_ctx *ctx,
+	struct isl_sched_graph *graph)
+{
+	int i;
+
+	graph->id_rank_table = id_rank_table_init(ctx, graph->id_list->n);
+	if (!graph->id_rank_table)
+		return isl_stat_error;
+
+	for (i = 0; i < graph->id_list->n; ++i) {
+		id_rank_table_find(graph->id_rank_table, graph->id_list->p[i], 1);
+	}
 	return isl_stat_ok;
 }
 
@@ -1466,11 +1615,15 @@ static isl_stat init_id_list(struct isl_sched_graph *graph,
 	isl_id_list_free(graph->id_list);
 	ctx = isl_union_map_get_ctx(spatial_proximity);
 	graph->id_list = isl_id_list_alloc(ctx, 1);
-	if ( isl_union_map_foreach_map(spatial_proximity, &add_unique_ids_to_list,
+	if (isl_union_map_foreach_map(spatial_proximity, &add_unique_ids_to_list,
 			&graph->id_list) < 0)
 		return isl_stat_error;
 	graph->id_list = isl_id_list_sort(graph->id_list,
 		&compare_ids_by_ref_count, spatial_proximity);
+
+	if (graph_init_id_rank_table(ctx, graph) < 0)
+		return isl_stat_error;
+
 	return isl_stat_ok;
 }
 
@@ -1487,6 +1640,7 @@ static isl_stat graph_init(struct isl_sched_graph *graph,
 	isl_ctx *ctx;
 	isl_union_set *domain;
 	isl_union_map *c;
+	isl_union_map *spatial_proximity;
 	struct isl_extract_edge_data data;
 	enum isl_edge_type i;
 	isl_stat r;
@@ -1538,10 +1692,18 @@ static isl_stat graph_init(struct isl_sched_graph *graph,
 		if (r < 0)
 			return isl_stat_error;
 	}
-	if (init_id_list(graph, sc->constraint[isl_edge_spatial_proximity]) < 0)
+	graph->counted_accesses =
+			isl_schedule_constraints_get_counted_accesses(sc);
+	if (!graph->counted_accesses)
 		return isl_stat_error;
 
-	return isl_stat_ok;
+	spatial_proximity = isl_schedule_constraints_get_spatial_proximity(sc);
+	r = isl_stat_ok;
+	if (init_id_list(graph, spatial_proximity) < 0)
+		r = isl_stat_error;
+	isl_union_map_free(spatial_proximity);
+
+	return r;
 }
 
 /* Check whether there is any dependence from node[j] to node[i]
@@ -3375,6 +3537,226 @@ static isl_stat add_var_sum_constraint(struct isl_sched_graph *graph,
 	return isl_stat_ok;
 }
 
+static inline __isl_give isl_basic_map *fix_out_dims_as_params(
+	__isl_take isl_basic_map *bmap)
+{
+	int n_param, n_out, i;
+	isl_local_space *local_space;
+	isl_constraint *constraint;
+
+	n_out = isl_basic_map_n_out(bmap);
+	bmap = isl_basic_map_add_dims(bmap, isl_dim_param, n_out);
+	n_param = isl_basic_map_n_param(bmap);
+	for (i = 0; i < n_out; i++) {
+		local_space = isl_basic_map_get_local_space(bmap);
+		constraint = isl_constraint_alloc_equality(local_space);
+		constraint = isl_constraint_set_coefficient_si(constraint,
+			isl_dim_out, i, -1);
+		constraint = isl_constraint_set_coefficient_si(constraint,
+			isl_dim_param, n_param - n_out + i, 1);
+		bmap = isl_basic_map_add_constraint(bmap, constraint);
+	}
+	return bmap;
+}
+
+static int access_rank(__isl_take isl_basic_map *bmap,
+	__isl_take isl_basic_map *partial_schedule)
+{
+	// XXX: this is based on the conjecture that isl simplification
+	// will prefer expressing a dimension as an equality to parameter
+	// rather than to other dimension.
+
+	isl_basic_map *scheduled;
+	int n_out, n_in, i, j, used;
+	int *used_dims;
+	isl_constraint *constraint;
+	isl_val *val;
+
+	partial_schedule = fix_out_dims_as_params(partial_schedule);
+	scheduled = isl_basic_map_apply_domain(isl_basic_map_copy(bmap),
+		partial_schedule);
+	bmap = isl_basic_map_domain_product(bmap, scheduled);
+
+	if (isl_basic_map_is_empty(bmap))
+	{
+		isl_basic_map_free(bmap);
+		return 0;
+	}
+
+	n_in = isl_basic_map_n_in(bmap);
+	n_out = isl_basic_map_n_out(bmap);
+	used_dims = (int *) calloc(n_in, sizeof(int));
+	for (i = 0; i < n_out; i++)
+	{
+		isl_basic_map_has_defining_equality(bmap, isl_dim_out, i,
+			&constraint);
+		for (j = 0; j < n_in; j++)
+		{
+			val = isl_constraint_get_coefficient_val(constraint,
+				isl_dim_in, j);
+			if (isl_val_is_zero(val) == isl_bool_false)
+				used_dims[j] = 1;
+			isl_val_free(val);
+		}
+		isl_constraint_free(constraint);
+	}
+	used = 0;
+	for (i = 0; i < n_in; i++)
+		used += used_dims[i];
+	free(used_dims);
+	isl_basic_map_free(bmap);
+
+	return used;
+}
+
+static inline int access_multiplicity(__isl_take isl_basic_map *access)
+{
+	int n_in = isl_basic_map_n_in(access);
+	int multiplicity, coeff;
+
+	access = isl_basic_map_drop_constraints_not_involving_dims(access,
+		isl_dim_in, n_in - 1, 1);
+	isl_assert(isl_basic_map_get_ctx(access), access->n_eq == 1,
+		return -1);
+	// FIXME: extract the value of the __cnt coefficient, negate it and
+	// divide the multiplicity by it rather than taking absolute value.
+	multiplicity = abs(isl_int_get_si(access->eq[0][0]));
+
+	fprintf(stderr, "[isl] mult %s: %d\n",
+		isl_basic_map_get_tuple_name(access, isl_dim_out), multiplicity);
+	isl_basic_map_free(access);
+	return multiplicity;
+}
+
+static isl_stat map_maximum_rank(__isl_keep isl_map *map,
+	__isl_keep isl_map *partial_schedule, struct isl_sched_graph *graph)
+{
+	int i, j, rank, n_scheduled, multiplicity;
+	int maxrank, prev_maxrank;
+	int maxrank_multiplicity = 0;
+	int total_multiplicity = 0;
+	struct id_rank_table_entry *id_entry;
+	isl_id *array_id;
+	isl_map *counted_accesses;
+
+	array_id = isl_map_get_tuple_id(map, isl_dim_out);
+	id_entry = id_rank_table_find(graph->id_rank_table, array_id, 0);
+	if (!id_entry)
+		return isl_stat_error;
+	maxrank = id_entry->rank;
+	maxrank_multiplicity = id_entry->multiplicity;
+	total_multiplicity = id_entry->total_multiplicity;
+
+	map = isl_map_copy(map);
+	counted_accesses = isl_map_copy(map);
+	map = isl_map_domain_factor_domain(map);
+	n_scheduled = isl_map_n_out(partial_schedule);
+	map = isl_map_add_dims(map, isl_dim_param, n_scheduled);
+	for (i = 0; i < map->n; ++i)
+	{
+		multiplicity = access_multiplicity(
+			isl_basic_map_copy(counted_accesses->p[i]));
+		if (multiplicity < 0)
+			goto error;
+		prev_maxrank = maxrank;
+		for (j = 0; j < partial_schedule->n; ++j)
+		{
+			rank = access_rank(isl_basic_map_copy(map->p[i]),
+				isl_basic_map_copy(partial_schedule->p[j]));
+			if (rank > maxrank)
+				maxrank = rank;
+		}
+		if (prev_maxrank == maxrank)
+			maxrank_multiplicity += multiplicity;
+		else if (maxrank > prev_maxrank)
+			maxrank_multiplicity = multiplicity;
+		total_multiplicity = multiplicity;
+	}
+
+	id_entry->rank = maxrank;
+	id_entry->multiplicity = maxrank_multiplicity;
+	id_entry->total_multiplicity = total_multiplicity;
+
+	isl_map_free(map);
+	isl_map_free(counted_accesses);
+	return isl_stat_ok;
+
+error:
+	isl_map_free(map);
+	isl_map_free(counted_accesses);
+	return isl_stat_error;
+}
+
+static isl_map *node_extract_schedule(struct isl_sched_node *);
+
+static isl_stat update_rank_table(__isl_take isl_map *access, void *user)
+{
+	isl_space *node_space;
+	struct isl_sched_node *node;
+	isl_map *schedule;
+	isl_stat r;
+	isl_id *array_id;
+	struct id_rank_table_entry *id_entry;
+	isl_ctx *ctx = isl_map_get_ctx(access);
+	struct isl_sched_graph *graph = user;
+
+	array_id = isl_map_get_tuple_id(access, isl_dim_out);
+	node_space = isl_map_get_space(access);
+	node_space = isl_space_domain_factor_domain(node_space);
+	node_space = isl_space_domain(node_space);
+	node = graph_find_node(ctx, graph, node_space);
+	isl_space_free(node_space);
+
+	schedule = node_extract_schedule(node);
+	r = map_maximum_rank(access, schedule, graph);
+
+	isl_map_free(access);
+	isl_map_free(schedule);
+	return r;
+}
+
+static isl_stat graph_update_rank_table(
+	struct isl_sched_graph *graph)
+{
+	isl_ctx *ctx = isl_union_map_get_ctx(graph->counted_accesses);
+	id_rank_table_reset(ctx, graph->id_rank_table);
+	return isl_union_map_foreach_map(graph->counted_accesses,
+		&update_rank_table, graph);
+}
+
+static int compare_ids_rank_table(__isl_keep isl_id *id1,
+	__isl_keep isl_id *id2, void *user)
+{
+	struct isl_hash_table *id_rank_table = user;
+	struct id_rank_table_entry *entry1 =
+		id_rank_table_find(id_rank_table, id1, 0);
+	struct id_rank_table_entry *entry2 =
+		id_rank_table_find(id_rank_table, id2, 0);
+	isl_ctx *ctx = isl_id_get_ctx(id1);
+
+	isl_assert(ctx, entry1, goto error);
+	isl_assert(ctx, entry2, goto error);
+
+	return cmp_id_rank_table_entry(entry1, entry2);
+
+error:
+	return 0;
+}
+
+static isl_stat graph_sort_id_list(struct isl_sched_graph *graph)
+{
+	if (!graph->id_list)
+		return isl_stat_ok;
+
+	if (graph_update_rank_table(graph) < 0)
+		return isl_stat_error;
+	graph->id_list = isl_id_list_sort(graph->id_list, &compare_ids_rank_table,
+		graph->id_rank_table);
+
+	if (!graph->id_list)
+		return isl_stat_error;
+}
+
 static void fix_at_zero2(struct isl_sched_graph *graph,
 						 int total, int pos)
 {
@@ -3453,12 +3835,24 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 		fprintf(stderr, "[isl] WARNING: EMPTY ID_LIST!\n\n\n");
 	}
 
+	// graph_update_rank_table(graph);
+	fprintf(stderr, "[isl] setup_lp n_ids=%d\n", n_ids);
+	graph_sort_id_list(graph);
+	id_rank_table_dump(ctx, graph->id_rank_table);
 	isl_id_list_dump(graph->id_list);
 
 	param_pos = 2 * n_ids + 2; //6/*#4*/;
 //	total = param_pos + 2 * nparam;
 	total = param_pos;
 	total += (2 * nparam + 1) * n_ids;
+
+	//fprintf(stderr, "[isl] graph n %d, edges %d, ids %d\n", graph->n, graph->n_edge, n_ids);
+	for (i = 0; i < graph->n_edge; ++i)
+	{
+		if (!is_spatial_proximity(&graph->edge[i]))
+			continue;
+		//isl_union_map_debug(graph->edge[i].array_tagged_map);
+	}
 
 	// Let's ignore plain proximity for now...
 	// Later, we may decide whether we need a separate set of
@@ -4403,6 +4797,93 @@ static int compute_maxvar(struct isl_sched_graph *graph)
 	return 0;
 }
 
+/* Drop all map constraints and add it to the the resulting union_map.
+ */
+static isl_stat add_universe_map(__isl_take isl_map *map, void *user)
+{
+	isl_union_map *umap = *(isl_union_map **) user;
+	int i;
+	// int n_dim = isl_map_dim(map, isl_dim_all);
+	// map = isl_map_remove_divs(map);
+	// map = isl_map_drop_constraints_involving_dims(map,
+	// 	isl_dim_all, 0, n_dim);
+	for (i = 0; i < map->n; ++i)
+	{
+		map->p[i]->n_eq = 0;
+		map->p[i]->n_ineq = 0;
+		map->p[i]->n_div = 0;
+	}
+	umap = isl_union_map_add_map(umap, map);
+
+	*(isl_union_map **) user = umap;
+}
+
+static __isl_give isl_union_map *universe_union_map(
+	__isl_take isl_union_map *umap)
+{
+	isl_space *space;
+	isl_union_map *result;
+	if (!umap)
+		return NULL;
+
+	space = isl_union_map_get_space(umap);
+	if (isl_union_map_n_map(umap) == 0)
+	{
+		result = isl_union_map_from_map(isl_map_universe(space));
+	}
+	else
+	{
+		result = isl_union_map_empty(space);
+		isl_union_map_foreach_map(umap, &add_universe_map, &result);
+	}
+	isl_union_map_free(umap);
+	return result;
+}
+
+/* Copy counted accesses only for those nodes which are present in the
+ * subgraph.  The list of nodes must be already set up.
+ */
+static isl_stat copy_counted_accesses(struct isl_sched_graph *sub,
+	struct isl_sched_graph *graph)
+{
+	isl_union_set *domain_universe, *access_mapper_set;
+	isl_union_map *access_mapper;
+	isl_set *set;
+	isl_space *space;
+	int i;
+
+	if (!sub || !graph)
+		return isl_stat_error;
+	if (sub->n == 0)
+		return isl_stat_ok;
+
+	space = isl_space_params(isl_space_copy(sub->node[0].space));
+	domain_universe = isl_union_set_empty(space);
+	for (i = 0; i < sub->n; ++i)
+	{
+		set = isl_set_universe(isl_space_copy(sub->node[i].space));
+		domain_universe = isl_union_set_union(domain_universe,
+			isl_union_set_from_set(set));
+	}
+	if (!domain_universe)
+		return isl_stat_error;
+
+	access_mapper_set =
+		isl_union_map_domain(isl_union_map_copy(graph->counted_accesses));
+	access_mapper = isl_union_set_unwrap(access_mapper_set);
+	access_mapper = isl_union_map_intersect_domain(access_mapper,
+		domain_universe);
+	access_mapper = isl_union_map_universe(access_mapper);
+	access_mapper_set = isl_union_map_wrap(access_mapper);
+
+	sub->counted_accesses = isl_union_map_intersect_domain(
+		isl_union_map_copy(graph->counted_accesses), access_mapper_set);
+
+	if (!sub->counted_accesses)
+		return isl_stat_error;
+	return isl_stat_ok;
+}
+
 /* Extract the subgraph of "graph" that consists of the node satisfying
  * "node_pred" and the edges satisfying "edge_pred" and store
  * the result in "sub".
@@ -4438,7 +4919,11 @@ static int extract_sub_graph(isl_ctx *ctx, struct isl_sched_graph *graph,
 	sub->n_total_row = graph->n_total_row;
 	sub->band_start = graph->band_start;
 
-	sub->id_list = isl_id_list_copy(graph->id_list);
+	copy_counted_accesses(sub, graph);
+	sub->id_list = isl_id_list_copy(graph->id_list); // TODO: copy only the ids present in this graph
+	if (graph_init_id_rank_table(ctx, sub) < 0)
+		return -1;
+
 
 	return 0;
 }
@@ -6953,14 +7438,18 @@ static __isl_give isl_schedule_constraints *add_array_tagged_constraints(
 	struct isl_sched_edge *edge, __isl_keep isl_union_map *umap,
 	__isl_take isl_schedule_constraints *sc)
 {
+	isl_union_map *spatial_proximity;
 	isl_union_map *tagged = isl_union_map_copy(edge->array_tagged_map);
 	tagged = isl_union_map_zip(tagged);
 	tagged = isl_union_map_apply_domain(tagged, isl_union_map_copy(umap));
 	tagged = isl_union_map_zip(tagged);
-	sc->constraint[isl_edge_spatial_proximity] = isl_union_map_union(
-		sc->constraint[isl_edge_spatial_proximity], tagged);
-	if (!sc->constraint[isl_edge_spatial_proximity])
+
+	spatial_proximity = isl_schedule_constraints_get_spatial_proximity(sc);
+	spatial_proximity = isl_union_map_union(spatial_proximity, tagged);
+	if (!spatial_proximity)
 		return isl_schedule_constraints_free(sc);
+	sc = isl_schedule_constraints_set_spatial_proximity(sc,
+							spatial_proximity);
 
 	return sc;
 }
