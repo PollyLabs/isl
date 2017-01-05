@@ -1634,6 +1634,54 @@ static isl_stat init_id_list(struct isl_sched_graph *graph,
 	return isl_stat_ok;
 }
 
+
+/* Copy counted accesses only for those nodes which are present in the
+ * subgraph.  The list of nodes must be already set up.
+ */
+static isl_stat copy_filter_counted_accesses(struct isl_sched_graph *sub,
+	__isl_keep isl_union_map *counted_accesses)
+{
+	isl_union_set *domain_universe, *access_mapper_set;
+	isl_union_map *access_mapper;
+	isl_set *set;
+	isl_space *space;
+	int i;
+
+	if (!sub || !counted_accesses)
+		return isl_stat_error;
+	if (sub->n == 0)
+	{
+		sub->counted_accesses = isl_union_map_empty(
+			isl_union_map_get_space(counted_accesses));
+		return isl_stat_ok;
+	}
+
+	space = isl_space_params(isl_space_copy(sub->node[0].space));
+	domain_universe = isl_union_set_empty(space);
+	for (i = 0; i < sub->n; ++i)
+	{
+		set = isl_set_universe(isl_space_copy(sub->node[i].space));
+		domain_universe = isl_union_set_add_set(domain_universe, set);
+	}
+	if (!domain_universe)
+		return isl_stat_error;
+
+	access_mapper_set =
+		isl_union_map_domain(isl_union_map_copy(counted_accesses));
+	access_mapper = isl_union_set_unwrap(access_mapper_set);
+	access_mapper = isl_union_map_intersect_domain(access_mapper,
+		domain_universe);
+	access_mapper = isl_union_map_universe(access_mapper);
+	access_mapper_set = isl_union_map_wrap(access_mapper);
+
+	sub->counted_accesses = isl_union_map_intersect_domain(
+		isl_union_map_copy(counted_accesses), access_mapper_set);
+
+	if (!sub->counted_accesses)
+		return isl_stat_error;
+	return isl_stat_ok;
+}
+
 /* Initialize the schedule graph "graph" from the schedule constraints "sc".
  *
  * The context is included in the domain before the nodes of
@@ -1648,6 +1696,7 @@ static isl_stat graph_init(struct isl_sched_graph *graph,
 	isl_union_set *domain;
 	isl_union_map *c;
 	isl_union_map *spatial_proximity;
+	isl_union_map *counted_accesses;
 	struct isl_extract_edge_data data;
 	enum isl_edge_type i;
 	isl_stat r;
@@ -1699,16 +1748,20 @@ static isl_stat graph_init(struct isl_sched_graph *graph,
 		if (r < 0)
 			return isl_stat_error;
 	}
-	graph->counted_accesses =
-			isl_schedule_constraints_get_counted_accesses(sc);
-	if (!graph->counted_accesses)
-		return isl_stat_error;
 
 	spatial_proximity = isl_schedule_constraints_get_spatial_proximity(sc);
 	r = isl_stat_ok;
 	if (init_id_list(graph, spatial_proximity) < 0)
 		r = isl_stat_error;
 	isl_union_map_free(spatial_proximity);
+	if (r < 0)
+		return r;
+
+	counted_accesses = isl_schedule_constraints_get_counted_accesses(sc);
+	r = isl_stat_ok;
+	if (copy_filter_counted_accesses(graph, counted_accesses) < 0)
+		return r;
+	isl_union_map_free(counted_accesses);
 
 	return r;
 }
@@ -4845,50 +4898,6 @@ static __isl_give isl_union_map *universe_union_map(
 	return result;
 }
 
-/* Copy counted accesses only for those nodes which are present in the
- * subgraph.  The list of nodes must be already set up.
- */
-static isl_stat copy_counted_accesses(struct isl_sched_graph *sub,
-	struct isl_sched_graph *graph)
-{
-	isl_union_set *domain_universe, *access_mapper_set;
-	isl_union_map *access_mapper;
-	isl_set *set;
-	isl_space *space;
-	int i;
-
-	if (!sub || !graph)
-		return isl_stat_error;
-	if (sub->n == 0)
-		return isl_stat_ok;
-
-	space = isl_space_params(isl_space_copy(sub->node[0].space));
-	domain_universe = isl_union_set_empty(space);
-	for (i = 0; i < sub->n; ++i)
-	{
-		set = isl_set_universe(isl_space_copy(sub->node[i].space));
-		domain_universe = isl_union_set_union(domain_universe,
-			isl_union_set_from_set(set));
-	}
-	if (!domain_universe)
-		return isl_stat_error;
-
-	access_mapper_set =
-		isl_union_map_domain(isl_union_map_copy(graph->counted_accesses));
-	access_mapper = isl_union_set_unwrap(access_mapper_set);
-	access_mapper = isl_union_map_intersect_domain(access_mapper,
-		domain_universe);
-	access_mapper = isl_union_map_universe(access_mapper);
-	access_mapper_set = isl_union_map_wrap(access_mapper);
-
-	sub->counted_accesses = isl_union_map_intersect_domain(
-		isl_union_map_copy(graph->counted_accesses), access_mapper_set);
-
-	if (!sub->counted_accesses)
-		return isl_stat_error;
-	return isl_stat_ok;
-}
-
 /* Extract the subgraph of "graph" that consists of the node satisfying
  * "node_pred" and the edges satisfying "edge_pred" and store
  * the result in "sub".
@@ -4924,7 +4933,8 @@ static int extract_sub_graph(isl_ctx *ctx, struct isl_sched_graph *graph,
 	sub->n_total_row = graph->n_total_row;
 	sub->band_start = graph->band_start;
 
-	copy_counted_accesses(sub, graph);
+	if (copy_filter_counted_accesses(sub, graph->counted_accesses) < 0)
+		return -1;
 	sub->id_list = isl_id_list_copy(graph->id_list); // TODO: copy only the ids present in this graph
 	if (graph_init_id_rank_table(ctx, sub) < 0)
 		return -1;
@@ -7515,6 +7525,38 @@ static __isl_give isl_schedule_constraints *collect_edge_constraints(
 	return sc;
 }
 
+static isl_stat identity_counted_accesses_map(__isl_take isl_map *access,
+	void *user)
+{
+	isl_space *space_copy;
+	isl_map *map;
+	isl_space *space = isl_map_get_space(access);
+	isl_union_map *result = *(isl_union_map **) user;
+
+	isl_map_free(access);
+	space = isl_space_domain(space);
+	space = isl_space_unwrap(space);
+	space = isl_space_range(space);
+	space_copy = isl_space_copy(space);
+	space = isl_space_map_from_domain_and_range(space, space_copy);
+
+	map = isl_map_identity(space);
+	result = isl_union_map_add_map(result, map);
+	*(isl_union_map **) user = result;
+	return isl_stat_ok;
+}
+
+static __isl_give isl_union_map *identity_counted_accesses_union_map(
+	__isl_keep isl_union_map *counted_accesses)
+{
+	isl_union_map *result = isl_union_map_empty(
+		isl_union_map_get_space(counted_accesses));
+	if (isl_union_map_foreach_map(counted_accesses,
+			&identity_counted_accesses_map, &result) < 0)
+		return isl_union_map_free(result);
+	return result;
+}
+
 /* Given a mapping "cluster_map" from the original instances to
  * the cluster instances, add schedule constraints on the clusters
  * to "sc" corresponding to all edges in "graph" between nodes that
@@ -7526,6 +7568,7 @@ static __isl_give isl_schedule_constraints *collect_constraints(
 	__isl_take isl_schedule_constraints *sc)
 {
 	int i;
+	isl_union_map *counted_accesses, *counted_cluster_map;
 
 	for (i = 0; i < graph->n_edge; ++i) {
 		struct isl_sched_edge *edge = &graph->edge[i];
@@ -7536,6 +7579,15 @@ static __isl_give isl_schedule_constraints *collect_constraints(
 			continue;
 		sc = collect_edge_constraints(edge, cluster_map, sc);
 	}
+	counted_cluster_map = isl_union_map_product(
+		isl_union_map_copy(cluster_map),
+		identity_counted_accesses_union_map(graph->counted_accesses));
+
+	counted_accesses = isl_union_map_apply_domain(
+		isl_union_map_copy(graph->counted_accesses),
+		counted_cluster_map);
+	sc = isl_schedule_constraints_set_counted_accesses(sc,
+		counted_accesses);
 
 	return sc;
 }
