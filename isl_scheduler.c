@@ -2711,7 +2711,7 @@ static isl_stat add_inter_spatial_proximity_constraints(
 	coef = isl_basic_set_transform_dims(coef, isl_dim_set,
 			offset, isl_mat_transpose(isl_mat_copy(src->vmap)));
 	coef = isl_basic_set_transform_dims(coef, isl_dim_set,
-			offset + src->nvar, isl_mat_transpose(isl_mat_copy(src->vmap)));
+			offset + src->nvar, isl_mat_transpose(isl_mat_copy(dst->vmap)));
 	if (!coef)
 		return isl_stat_error;
 
