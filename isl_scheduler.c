@@ -371,6 +371,15 @@ static __isl_null struct isl_hash_table *id_rank_table_free(isl_ctx *ctx,
 	isl_hash_table_free(ctx, table);
 }
 
+static void id_rank_table_entry_init(struct id_rank_table_entry *id_entry,
+	isl_id *id)
+{
+	id_entry->id = id;
+	id_entry->rank = 0;
+	id_entry->multiplicity = 0;
+	id_entry->total_multiplicity = 0;
+}
+
 static struct id_rank_table_entry *id_rank_table_find(
 	__isl_keep struct isl_hash_table *table, isl_id *id, int reserve)
 {
@@ -388,10 +397,7 @@ static struct id_rank_table_entry *id_rank_table_find(
 			&eq_id_rank_table_entry, &pattern, 1);
 		id_entry = isl_alloc(ctx, struct id_rank_table_entry,
 			sizeof(struct id_rank_table_entry));
-		id_entry->id = id;
-		id_entry->rank = 0;
-		id_entry->multiplicity = 0;
-		id_entry->total_multiplicity = 0;
+		id_rank_table_entry_init(id_entry, id);
 		entry->data = id_entry;
 	}
 
@@ -404,7 +410,7 @@ static isl_stat id_rank_table_element_reset(void **entry,
 	struct id_rank_table_entry *id_entry =
 		*(struct id_rank_table_entry **) entry;
 	(void) user;
-	id_entry->rank = 0;
+	id_rank_table_entry_init(id_entry, id_entry->id);
 	return isl_stat_ok;
 }
 
@@ -422,7 +428,8 @@ static isl_stat id_rank_table_element_dump(void **entry,
 		*(struct id_rank_table_entry **) entry;
 	(void) user;
 	isl_id_dump(id_entry->id);
-	fprintf(stderr, "-> %d\n", id_entry->rank);
+	fprintf(stderr, "-> (%d, %d, %d)\n", id_entry->rank,
+		id_entry->multiplicity, id_entry->total_multiplicity);
 	return isl_stat_ok;
 }
 
@@ -3622,8 +3629,6 @@ static inline int access_multiplicity(__isl_take isl_basic_map *access)
 	// divide the multiplicity by it rather than taking absolute value.
 	multiplicity = abs(isl_int_get_si(access->eq[0][0]));
 
-	fprintf(stderr, "[isl] mult %s: %d\n",
-		isl_basic_map_get_tuple_name(access, isl_dim_out), multiplicity);
 	isl_basic_map_free(access);
 	return multiplicity;
 }
@@ -3670,7 +3675,7 @@ static isl_stat map_maximum_rank(__isl_keep isl_map *map,
 			maxrank_multiplicity += multiplicity;
 		else if (maxrank > prev_maxrank)
 			maxrank_multiplicity = multiplicity;
-		total_multiplicity = multiplicity;
+		total_multiplicity += multiplicity;
 	}
 
 	id_entry->rank = maxrank;
