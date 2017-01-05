@@ -3481,11 +3481,11 @@ static isl_stat add_arraywise_sum_constraints(
 
 	for (i = 0; i < n; ++i)
 	{
-		if (add_groups_sum_constraint(graph, i,
+		if (add_groups_sum_constraint(graph, 2*i,
 									  param_pos + 1 + i * (2 * nparam + 1),
 									  2 * nparam, 0, 1) < 0)
 			return isl_stat_error;
-		if (add_groups_sum_constraint(graph, n + i,
+		if (add_groups_sum_constraint(graph, 2*i+1,
 									  param_pos + i * (2 * nparam + 1),
 									  1, 0, 1) < 0)
 			return isl_stat_error;
