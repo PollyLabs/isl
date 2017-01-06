@@ -4884,6 +4884,7 @@ static isl_stat add_universe_map(__isl_take isl_map *map, void *user)
 	umap = isl_union_map_add_map(umap, map);
 
 	*(isl_union_map **) user = umap;
+	return isl_stat_ok;
 }
 
 static __isl_give isl_union_map *universe_union_map(
