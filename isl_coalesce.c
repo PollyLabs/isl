@@ -3774,6 +3774,7 @@ __isl_give isl_map *isl_map_coalesce(__isl_take isl_map *map)
 		goto error;
 
 	for (i = 0; i < map->n; ++i) {
+		map->p[i] = isl_basic_map_gauss(map->p[i], NULL);
 		map->p[i] = isl_basic_map_reduce_coefficients(map->p[i]);
 		if (!map->p[i])
 			goto error;
