@@ -3648,8 +3648,9 @@ static int access_rank(__isl_take isl_basic_map *bmap,
 	used_dims = (int *) calloc(n_in, sizeof(int));
 	for (i = 0; i < n_out; i++)
 	{
-		isl_basic_map_has_defining_equality(bmap, isl_dim_out, i,
-			&constraint);
+		if (!isl_basic_map_has_defining_equality(bmap, isl_dim_out, i,
+				&constraint))  // FIXME: why this could happen??
+			continue;
 		for (j = 0; j < n_in; j++)
 		{
 			val = isl_constraint_get_coefficient_val(constraint,
@@ -3700,7 +3701,12 @@ static isl_stat map_maximum_rank(__isl_keep isl_map *map,
 	array_id = isl_map_get_tuple_id(map, isl_dim_out);
 	id_entry = id_rank_table_find(graph->id_rank_table, array_id, 0);
 	if (!id_entry)
+	{
+		if (id_list_index_of(graph->id_list, array_id) == -1)
+			return isl_stat_ok;  // FIXME: if it is not in id_table AND it is not in id_list, so we don't care about it (id_list contains only the ids present in spatial proximity)
+								 // better solution is: keep only those relations in counted_accesses, that are connected to id_list
 		return isl_stat_error;
+	}
 	maxrank = id_entry->rank;
 	maxrank_multiplicity = id_entry->multiplicity;
 	total_multiplicity = id_entry->total_multiplicity;
@@ -3777,7 +3783,8 @@ static isl_stat graph_update_rank_table(
 	struct isl_sched_graph *graph)
 {
 	isl_ctx *ctx = isl_union_map_get_ctx(graph->counted_accesses);
-	id_rank_table_reset(ctx, graph->id_rank_table);
+	if (id_rank_table_reset(ctx, graph->id_rank_table) < 0)
+		return isl_stat_error;
 	return isl_union_map_foreach_map(graph->counted_accesses,
 		&update_rank_table, graph);
 }
@@ -3813,6 +3820,7 @@ static isl_stat graph_sort_id_list(struct isl_sched_graph *graph)
 
 	if (!graph->id_list)
 		return isl_stat_error;
+	return isl_stat_ok;
 }
 
 static void fix_at_zero2(struct isl_sched_graph *graph,
@@ -3894,8 +3902,10 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	}
 
 	// graph_update_rank_table(graph);
-	fprintf(stderr, "[isl] setup_lp n_ids=%d\n", n_ids);
-	graph_sort_id_list(graph);
+	fprintf(stderr, "[isl] setup_lp n_ids=%d, counted acceses %d\n", n_ids,
+		isl_union_map_n_map(graph->counted_accesses));
+	if (graph_sort_id_list(graph) < 0)
+		return isl_stat_error;
 	id_rank_table_dump(ctx, graph->id_rank_table);
 	isl_id_list_dump(graph->id_list);
 
