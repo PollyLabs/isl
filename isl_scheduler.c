@@ -40,6 +40,7 @@
 #include <isl_morph.h>
 #include <isl/ilp.h>
 #include <isl_val_private.h>
+#include <isl/id_to_id.h>
 
 #define xDebug(type, a) \
   fprintf(stderr, "%s:%d in %s, (isl_%s) %s\n  ", \
@@ -57,6 +58,7 @@
 #define isl_pw_aff(a) xDebug(pw_aff, a)
 #define isl_pw_multi_aff(a) xDebug(pw_multi_aff, a)
 #define isl_flow_debug(a) xDebug(flow, a)
+#define isl_id_debug(a) xDebug(id, a)
 
 /*
  * The scheduling algorithm implemented in this file was inspired by
@@ -342,7 +344,12 @@ static int cmp_id_rank_table_entry(const struct id_rank_table_entry *entry1,
 		return diff_rank;
 	if (diff_multiplicity != 0)
 		return diff_multiplicity;
-	return diff_total_multiplicity;
+	if (diff_total_multiplicity != 0)
+		return diff_total_multiplicity;
+
+	const char *name1 = isl_id_get_name(entry1->id);
+	const char *name2 = isl_id_get_name(entry2->id);
+	return strcmp(name1, name2);  // FIXME: comparing by name rather than by repetition count...
 }
 
 static __isl_give struct isl_hash_table *id_rank_table_init(isl_ctx *ctx,
@@ -535,6 +542,7 @@ struct isl_sched_graph {
 	isl_id_list *id_list; // used by setup_lp in spatial proximity mode
 	isl_union_map *counted_accesses;
 	struct isl_hash_table *id_rank_table;
+	isl_id_to_id *ref_to_array;
 };
 
 /* Initialize node_table based on the list of nodes.
@@ -792,6 +800,8 @@ static int graph_alloc(isl_ctx *ctx, struct isl_sched_graph *graph,
 	graph->inter_hmap = isl_map_to_basic_set_alloc(ctx, 2 * n_edge);
 	graph->counted_accesses = NULL;
 
+	graph->ref_to_array = isl_id_to_id_alloc(ctx, 1);
+
 	if (!graph->node || !graph->region || (graph->n_edge && !graph->edge) ||
 	    !graph->sorted)
 		return -1;
@@ -841,6 +851,7 @@ static void graph_free(isl_ctx *ctx, struct isl_sched_graph *graph)
 	isl_hash_table_free(ctx, graph->node_table);
 	isl_basic_set_free(graph->lp);
 	isl_union_map_free(graph->counted_accesses);
+	isl_id_to_id_free(graph->ref_to_array);
 
 #if 0
 	if (graph->id_list)
@@ -1614,6 +1625,29 @@ static isl_stat graph_init_id_rank_table(isl_ctx *ctx,
 	return isl_stat_ok;
 }
 
+static isl_stat ref_to_array_add(__isl_take isl_map *map, void *user)
+{
+	isl_id *ref_id, *array_id;
+	struct isl_sched_graph *graph = user;
+	isl_space *space = isl_map_get_space(map);
+
+	isl_map_free(map);
+	space = isl_space_domain_factor_range(space);
+	ref_id = isl_space_get_tuple_id(space, isl_dim_in);
+	array_id = isl_space_get_tuple_id(space, isl_dim_out);
+	isl_space_free(space);
+
+	graph->ref_to_array = isl_id_to_id_set(graph->ref_to_array,
+		ref_id, array_id);
+	return isl_stat_ok;
+}
+
+static isl_stat init_ref_to_array(struct isl_sched_graph *graph)
+{
+	return isl_union_map_foreach_map(graph->counted_accesses,
+		&ref_to_array_add, graph);
+}
+
 static isl_stat init_id_list(struct isl_sched_graph *graph,
 	__isl_keep isl_union_map *spatial_proximity)
 {
@@ -1760,9 +1794,11 @@ static isl_stat graph_init(struct isl_sched_graph *graph,
 	counted_accesses = isl_schedule_constraints_get_counted_accesses(sc);
 	r = isl_stat_ok;
 	if (copy_filter_counted_accesses(graph, counted_accesses) < 0)
-		return r;
+		r = isl_stat_error;
 	isl_union_map_free(counted_accesses);
 
+	init_ref_to_array(graph);
+	
 	return r;
 }
 
@@ -2481,9 +2517,9 @@ static int force_zero(struct isl_sched_edge *edge, int use_coincidence)
 	return is_local(edge) || (use_coincidence && is_coincidence(edge));
 }
 
-static isl_stat extract_ids_from_tags(__isl_take isl_map *map, isl_id **id1, isl_id **id2)
+static isl_stat extract_ids_from_tags(__isl_take isl_map *map, 
+	__isl_give isl_id **id1, __isl_give isl_id **id2)
 {
-	// isl_map *tags;
 	isl_space *space;
 
 	if (!map || !id1 || !id2)
@@ -2499,17 +2535,6 @@ static isl_stat extract_ids_from_tags(__isl_take isl_map *map, isl_id **id1, isl
 	*id1 = isl_space_get_tuple_id(space, isl_dim_in);
 	*id2 = isl_space_get_tuple_id(space, isl_dim_out);
 	isl_space_free(space);
-
-	// if (isl_map_can_zip(map) != isl_bool_true)
-	// 	return isl_stat_error;
-
-	// tags = isl_map_zip(map);
-	// tags = isl_set_unwrap(isl_map_range(tags));
-	// space = isl_map_get_space(tags);
-	// *id1 = isl_space_get_tuple_id(space, isl_dim_in);
-	// *id2 = isl_space_get_tuple_id(space, isl_dim_out);
-	// isl_space_free(space);
-	// isl_map_free(tags);
 
 	return isl_stat_ok;
 }
@@ -2529,7 +2554,7 @@ static int id_list_index_of(struct isl_id_list *list, isl_id *id)
 struct add_intra_spatial_proximity_data {
 	struct isl_sched_graph *graph;
 	struct isl_sched_edge *edge;
-	int s;
+	int remove_inter_ref_deps;
 	isl_basic_set *coef;
 	isl_dim_map *dim_map;
 };
@@ -2540,7 +2565,6 @@ static isl_stat add_intra_spatial_proximity_constraints_single(
 {
 	struct add_intra_spatial_proximity_data *data = user;
 	struct isl_sched_graph *graph = data->graph;
-	//int s = data->s;
 	isl_basic_set *coef = data->coef;
 	isl_dim_map *dim_map = data->dim_map;
 	isl_dim_map *dim_map1, *dim_map2;
@@ -2557,6 +2581,14 @@ static isl_stat add_intra_spatial_proximity_constraints_single(
 
 	if ((r = extract_ids_from_tags(map, &id1, &id2)) < 0)
 		return r;
+
+	if (id1 != id2 && data->remove_inter_ref_deps)
+	{
+		isl_id_free(id1);
+		isl_id_free(id2);
+		return isl_stat_ok;
+	}
+
 	start1 = id_list_index_of(graph->id_list, id1);
 	start2 = id_list_index_of(graph->id_list, id2);
 	if (start1 < 0 || start2 < 0)
@@ -2592,6 +2624,8 @@ static isl_stat add_intra_spatial_proximity_constraints_single(
 		graph->lp = isl_basic_set_add_constraints_dim_map(graph->lp,
 				isl_basic_set_copy(coef), dim_map2);
 	}
+	isl_id_free(id1);
+	isl_id_free(id2);
 
 	return isl_stat_ok;
 }
@@ -2626,7 +2660,7 @@ static isl_stat add_intra_spatial_proximity_constraints(
 
 	if (!local) {
 		struct add_intra_spatial_proximity_data data = {
-			graph, edge, s, coef, dim_map
+			graph, edge, 1, coef, dim_map
 		};
 		if (isl_union_map_foreach_map(spatial_proximity,
 				&add_intra_spatial_proximity_constraints_single,
@@ -2718,15 +2752,23 @@ static isl_stat add_inter_spatial_proximity_constraints(
 	dim_map = inter_dim_map(ctx, graph, src, dst, offset, -s);
 	if (!local)
 	{
-		struct add_spatial_constraints_data data = {
-			graph, coef, dim_map
+		// struct add_spatial_constraints_data data = {
+		// 	graph, coef, dim_map
+		// };
+		// if ((r = isl_union_map_foreach_map(spatial_proximity,
+		// 		&add_spatial_proximity_constraints_single, &data)) < 0)
+		// {
+		// 	isl_dim_map_free(ctx, dim_map);
+		// 	return r;
+		// }
+		struct add_intra_spatial_proximity_data data = {
+			graph, edge, 0, coef, dim_map  // FIXME: play with 1-0 here
 		};
-		if ((r = isl_union_map_foreach_map(spatial_proximity,
-				&add_spatial_proximity_constraints_single, &data)) < 0)
-		{
-			isl_dim_map_free(ctx, dim_map);
-			return r;
-		}
+		if (isl_union_map_foreach_map(spatial_proximity,
+				&add_intra_spatial_proximity_constraints_single,
+				&data) < 0)
+			return isl_stat_error;
+		// TODO: free dim map properly
 	} else {
 		graph->lp = isl_basic_set_extend_constraints(graph->lp,
 				coef->n_eq, coef->n_ineq);
@@ -3751,6 +3793,64 @@ error:
 	return isl_stat_error;
 }
 
+static isl_stat map_maximum_ref_rank(__isl_keep isl_map *map,
+	__isl_keep isl_map *partial_schedule,
+	struct isl_sched_graph *graph)
+{
+	isl_id *ref_id;
+	isl_space *space;
+	struct id_rank_table_entry *id_entry;
+	int n_scheduled, i, j, maxrank, prev_rank, multiplicity;
+	int total_multiplicity, rank;
+
+	space = isl_map_get_space(map);
+	space = isl_space_domain_factor_range(space);
+	ref_id = isl_space_get_tuple_id(space, isl_dim_in);
+	isl_space_free(space);
+
+	id_entry = id_rank_table_find(graph->id_rank_table, ref_id, 0);
+	if (!id_entry)
+	{
+		if (id_list_index_of(graph->id_list, ref_id) == -1)
+			return isl_stat_ok;  // FIXME: if it is not in id_table AND it is not in id_list, so we don't care about it (id_list contains only the ids present in spatial proximity)
+								 // better solution is: keep only those relations in counted_accesses, that are connected to id_list
+		return isl_stat_error;
+	}
+	maxrank = id_entry->rank;
+	multiplicity = id_entry->multiplicity;
+	total_multiplicity = id_entry->total_multiplicity;
+
+	map = isl_map_copy(map);
+	map = isl_map_domain_factor_domain(map);
+	n_scheduled = isl_map_n_out(partial_schedule);
+	map = isl_map_add_dims(map, isl_dim_param, n_scheduled);
+
+	prev_rank = maxrank;
+	for (i = 0; i < map->n; ++i)
+	{
+		for (j = 0; j < partial_schedule->n; ++j)
+		{
+			rank = access_rank(isl_basic_map_copy(map->p[i]),
+				isl_basic_map_copy(partial_schedule->p[j]));
+			if (rank > maxrank)
+				maxrank = rank;
+		}
+	}
+	if (maxrank == prev_rank)
+		++multiplicity;
+	else if (maxrank > prev_rank)
+		multiplicity = 1;
+	++total_multiplicity;
+
+	id_entry->rank = maxrank;
+	id_entry->multiplicity = multiplicity;
+	id_entry->total_multiplicity = total_multiplicity;
+
+	isl_map_free(map);
+
+	return isl_stat_ok;
+}
+
 static isl_map *node_extract_schedule(struct isl_sched_node *);
 
 static isl_stat update_rank_table(__isl_take isl_map *access, void *user)
@@ -3772,7 +3872,7 @@ static isl_stat update_rank_table(__isl_take isl_map *access, void *user)
 	isl_space_free(node_space);
 
 	schedule = node_extract_schedule(node);
-	r = map_maximum_rank(access, schedule, graph);
+	r = map_maximum_ref_rank(access, schedule, graph);
 
 	isl_map_free(access);
 	isl_map_free(schedule);
@@ -4947,6 +5047,8 @@ static int extract_sub_graph(isl_ctx *ctx, struct isl_sched_graph *graph,
 	if (copy_filter_counted_accesses(sub, graph->counted_accesses) < 0)
 		return -1;
 	sub->id_list = isl_id_list_copy(graph->id_list); // TODO: copy only the ids present in this graph
+	isl_id_to_id_free(sub->ref_to_array);
+	sub->ref_to_array = isl_id_to_id_copy(graph->ref_to_array);
 	if (graph_init_id_rank_table(ctx, sub) < 0)
 		return -1;
 
