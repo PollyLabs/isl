@@ -447,6 +447,133 @@ static isl_stat id_rank_table_dump(isl_ctx *ctx,
 		NULL);
 }
 
+struct multi_id_entry
+{
+	isl_id *id;
+	isl_id_list *list;
+};
+
+static __isl_give struct multi_id_entry *multi_id_entry_alloc(isl_ctx *ctx)
+{
+	struct multi_id_entry *entry = isl_calloc(ctx, struct multi_id_entry,
+		sizeof(struct multi_id_entry));
+	entry->list = isl_id_list_alloc(ctx, 1);
+	return entry;
+}
+
+static __isl_give struct multi_id_entry *multi_id_entry_init(
+	__isl_take struct multi_id_entry *entry, __isl_take isl_id *id)
+{
+	entry->id = id;
+	return entry;
+}
+
+static __isl_give struct multi_id_entry *multi_id_entry_add(
+	__isl_take struct multi_id_entry *entry, __isl_take isl_id *id)
+{
+	entry->list = isl_id_list_add(entry->list, id);
+	return entry;
+}
+
+static __isl_null struct multi_id_entry *multi_id_entry_free(
+	struct multi_id_entry *entry)
+{
+	if (!entry->id)
+		isl_id_free(entry->id);
+	isl_id_list_free(entry->list);
+	free(entry);
+	return NULL;
+}
+
+static int multi_id_entry_cmp(__isl_keep struct multi_id_entry *entry1,
+	__isl_keep struct multi_id_entry *entry2)
+{
+	const char *name1, *name2;
+	if (entry1->id == entry2->id)
+		return 0;
+
+	name1 = isl_id_get_name(entry1->id);
+	name2 = isl_id_get_name(entry2->id);
+
+	return strcmp(name1, name2);
+}
+
+static int multi_id_entry_eq(__isl_keep const struct multi_id_entry *entry1,
+	__isl_keep const struct multi_id_entry *entry2)
+{
+	return entry1->id == entry2->id;
+}
+
+static uint32_t multi_id_entry_hash(__isl_keep struct multi_id_entry *entry)
+{
+	return isl_id_get_hash(entry->id);
+}
+
+static void multi_id_entry_dump(__isl_keep struct multi_id_entry *entry)
+{
+	if (!entry)
+		return;
+	isl_id_dump(entry->id);
+	fprintf(stderr, " -> ");
+	isl_id_list_dump(entry->list);
+}
+
+static isl_stat array_to_ref_element_dump(void **entry, void *user)
+{
+	struct multi_id_entry *id_entry = *(struct multi_id_entry **) entry;
+	multi_id_entry_dump(id_entry);
+	return isl_stat_ok;
+}
+
+static void array_to_ref_dump(isl_ctx *ctx, struct isl_hash_table *table)
+{
+	if (!table)
+		return;
+	isl_hash_table_foreach(ctx, table, &array_to_ref_element_dump, NULL);
+}
+
+
+static int array_to_ref_element_equal(const void *entry, const void *val)
+{
+	const struct multi_id_entry *id_val = val;
+	const struct multi_id_entry *id_entry = entry;
+	return multi_id_entry_eq(id_val, id_entry);
+}
+
+static isl_stat array_to_ref_element_free(void **entry, void *user)
+{
+	struct multi_id_entry *id_entry = *(struct multi_id_entry **) entry;
+	*(struct multi_id_entry **) entry = NULL;
+	(void) user;
+	multi_id_entry_free(id_entry);
+	return isl_stat_ok;
+}
+
+static void array_to_ref_free(isl_ctx *ctx, struct isl_hash_table *table)
+{
+	if (!table)
+		return;
+	isl_hash_table_foreach(ctx, table, &array_to_ref_element_free, NULL);
+	isl_hash_table_free(ctx, table);
+}
+
+static struct __isl_keep isl_hash_table_entry *array_to_ref_find(isl_ctx *ctx,
+	__isl_keep struct isl_hash_table *table, __isl_keep isl_id *id)
+{
+	uint32_t hash;
+	struct isl_hash_table_entry *entry;
+	struct multi_id_entry *pattern = multi_id_entry_alloc(ctx);
+	pattern = multi_id_entry_init(pattern, isl_id_copy(id));
+	hash = multi_id_entry_hash(pattern);
+	entry = isl_hash_table_find(ctx, table, hash, &array_to_ref_element_equal,
+		pattern, 1);
+	if (!entry->data)
+		entry->data = pattern;
+	else
+		multi_id_entry_free(pattern);
+	return entry;
+}
+
 /* Internal information about the dependence graph used during
  * the construction of the schedule.
  *
@@ -543,7 +670,27 @@ struct isl_sched_graph {
 	isl_union_map *counted_accesses;
 	struct isl_hash_table *id_rank_table;
 	isl_id_to_id *ref_to_array;
+	struct isl_hash_table *array_to_ref;
+	int array_to_ref_borrowed;
 };
+
+static __isl_give isl_id_list *graph_refs_to_same_array(isl_ctx *ctx,
+	struct isl_sched_graph *graph, __isl_keep isl_id *id)
+{
+	isl_id *array_id;
+	struct isl_hash_table_entry *entry;
+	struct multi_id_entry *mid_entry;
+
+	array_id = isl_id_to_id_get(graph->ref_to_array, isl_id_copy(id));
+	if (!array_id)
+		return NULL;
+	entry = array_to_ref_find(ctx, graph->array_to_ref, array_id);
+	isl_id_free(array_id);
+	if (!entry)
+		return NULL;
+	mid_entry = (struct multi_id_entry *) entry->data;
+	return isl_id_list_copy(mid_entry->list);
+}
 
 /* Initialize node_table based on the list of nodes.
  */
@@ -801,6 +948,7 @@ static int graph_alloc(isl_ctx *ctx, struct isl_sched_graph *graph,
 	graph->counted_accesses = NULL;
 
 	graph->ref_to_array = isl_id_to_id_alloc(ctx, 1);
+	graph->array_to_ref = isl_hash_table_alloc(ctx, 1);
 
 	if (!graph->node || !graph->region || (graph->n_edge && !graph->edge) ||
 	    !graph->sorted)
@@ -811,6 +959,8 @@ static int graph_alloc(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	return 0;
 }
+
+static void array_to_ref_free(isl_ctx *ctx, struct isl_hash_table *table);
 
 static void graph_free(isl_ctx *ctx, struct isl_sched_graph *graph)
 {
@@ -852,6 +1002,8 @@ static void graph_free(isl_ctx *ctx, struct isl_sched_graph *graph)
 	isl_basic_set_free(graph->lp);
 	isl_union_map_free(graph->counted_accesses);
 	isl_id_to_id_free(graph->ref_to_array);
+	if (!graph->array_to_ref_borrowed)
+		array_to_ref_free(ctx, graph->array_to_ref);
 
 #if 0
 	if (graph->id_list)
@@ -1637,8 +1789,16 @@ static isl_stat ref_to_array_add(__isl_take isl_map *map, void *user)
 	array_id = isl_space_get_tuple_id(space, isl_dim_out);
 	isl_space_free(space);
 
+	isl_ctx *ctx = isl_map_get_ctx(map);
+	struct isl_hash_table_entry *entry = array_to_ref_find(ctx,
+		graph->array_to_ref, array_id);
+	struct multi_id_entry *mid_entry = entry->data;
+	mid_entry = multi_id_entry_add(mid_entry, isl_id_copy(ref_id));
+	entry->data = mid_entry;
+
 	graph->ref_to_array = isl_id_to_id_set(graph->ref_to_array,
 		ref_id, array_id);
+
 	return isl_stat_ok;
 }
 
@@ -1798,6 +1958,9 @@ static isl_stat graph_init(struct isl_sched_graph *graph,
 	isl_union_map_free(counted_accesses);
 
 	init_ref_to_array(graph);
+	graph->array_to_ref_borrowed = 0;
+
+	array_to_ref_dump(ctx, graph->array_to_ref);
 	
 	return r;
 }
@@ -3793,6 +3956,68 @@ error:
 	return isl_stat_error;
 }
 
+struct union_map_transform_data
+{
+	__isl_give isl_map *(*f)(__isl_take isl_map *, void *);
+	isl_union_map *result;
+	void *user;
+};
+
+static isl_stat union_map_transform_helper(__isl_take isl_map *map,
+	void *user)
+{
+	struct union_map_transform_data *data = user;
+	map = data->f(map, data->user);
+	if (!map)
+		return isl_stat_error;
+	data->result = isl_union_map_add_map(data->result, map);
+	if (!data->result)
+		return isl_stat_error;
+	return isl_stat_ok;
+}
+
+static __isl_give isl_union_map *union_map_transform(
+	__isl_take isl_union_map *umap,
+	__isl_give isl_map *(*f)(__isl_take isl_map *, void *),
+	void *user)
+{
+	isl_union_map *result;
+	isl_space *space;
+
+	if (!umap)
+		return NULL;
+
+	space = isl_union_map_get_space(umap);
+	result = isl_union_map_empty(space);
+	struct union_map_transform_data data = {f, result, user};
+	if (isl_union_map_foreach_map(umap, &union_map_transform_helper,
+			&data) < 0)
+		result = isl_union_map_free(result);
+
+	isl_union_map_free(umap);
+
+	return result;
+}
+
+static __isl_give isl_map *filter_by_domain_tag(__isl_take isl_map *map,
+	void *user)
+{
+	isl_id *tag = user;
+	isl_id *map_tag;
+	isl_space *space = isl_map_get_space(map);
+	space = isl_space_domain(space);
+	space = isl_space_unwrap(space);
+	map_tag = isl_space_get_tuple_id(space, isl_dim_out);
+	if (map_tag == tag)
+	{
+		isl_space_free(space);
+		return map;
+	}
+
+	isl_map_free(map);
+	return isl_map_empty(space);
+}
+
 static isl_stat map_maximum_ref_rank(__isl_keep isl_map *map,
 	__isl_keep isl_map *partial_schedule,
 	struct isl_sched_graph *graph)
@@ -3800,7 +4025,7 @@ static isl_stat map_maximum_ref_rank(__isl_keep isl_map *map,
 	isl_id *ref_id;
 	isl_space *space;
 	struct id_rank_table_entry *id_entry;
-	int n_scheduled, i, j, maxrank, prev_rank, multiplicity;
+	int n_scheduled, i, j, maxrank, prev_rank;
 	int total_multiplicity, rank;
 
 	space = isl_map_get_space(map);
@@ -3817,8 +4042,57 @@ static isl_stat map_maximum_ref_rank(__isl_keep isl_map *map,
 		return isl_stat_error;
 	}
 	maxrank = id_entry->rank;
-	multiplicity = id_entry->multiplicity;
 	total_multiplicity = id_entry->total_multiplicity;
+
+	// current ref_id is included in the same_array_ids, so we will count it
+	// as multiplicity 1
+	isl_ctx *ctx = isl_map_get_ctx(map);
+	isl_id_list *same_array_ids = graph_refs_to_same_array(ctx, graph, ref_id);
+	int n = isl_id_list_n_id(same_array_ids);
+	int any = 0;
+	for (i = 0; i < n; ++i)
+	{
+		isl_id *other_id = isl_id_list_get_id(same_array_ids, i);
+		// find access map to another id ()
+		// XXX: not really efficient, better for speed (not memory) is to compute
+		//      a union map of affine hulls beforehand
+		isl_union_map *umap = union_map_transform(
+			isl_union_map_copy(graph->counted_accesses),
+			&filter_by_domain_tag, other_id);
+		if (isl_union_map_n_map(umap) == 0)
+		{
+			isl_union_map_free(umap);
+			isl_id_free(other_id);
+			continue;
+		}
+		if (isl_union_map_n_map(umap) != 1)
+		{
+			fprintf(stderr, "[isl] !!! multiple maps accessing same ref !!!\n");
+			return isl_stat_error;
+		}
+		isl_basic_map *bmap1 = isl_map_affine_hull(
+			isl_map_domain_factor_domain(isl_map_copy(map)));
+		isl_map *mumap = isl_map_from_union_map(umap);
+		mumap = isl_map_domain_factor_domain(mumap);
+		isl_basic_map *bmap2 = isl_map_affine_hull(mumap);
+		if (isl_basic_map_is_equal(bmap1, bmap2))
+		{
+			struct id_rank_table_entry *other_id_entry = id_rank_table_find(
+				graph->id_rank_table, other_id, 0);
+			if (other_id_entry)
+			{
+				other_id_entry->multiplicity += 1;
+				any = 1;
+			}
+			else if (id_list_index_of(graph->id_list, other_id) != -1)
+			{
+				return isl_stat_error;  // FIXME: ignoring stuff that is not in the id_lists, probably because there are no dependences on it;  need to keep array_to_ref consistent
+			}
+		}
+		isl_basic_map_free(bmap1);
+		isl_basic_map_free(bmap2);
+		isl_id_free(other_id);
+	}
 
 	map = isl_map_copy(map);
 	map = isl_map_domain_factor_domain(map);
@@ -3836,14 +4110,9 @@ static isl_stat map_maximum_ref_rank(__isl_keep isl_map *map,
 				maxrank = rank;
 		}
 	}
-	if (maxrank == prev_rank)
-		++multiplicity;
-	else if (maxrank > prev_rank)
-		multiplicity = 1;
 	++total_multiplicity;
 
 	id_entry->rank = maxrank;
-	id_entry->multiplicity = multiplicity;
 	id_entry->total_multiplicity = total_multiplicity;
 
 	isl_map_free(map);
@@ -5004,7 +5273,11 @@ static int extract_sub_graph(isl_ctx *ctx, struct isl_sched_graph *graph,
 		return -1;
 	sub->id_list = isl_id_list_copy(graph->id_list); // TODO: copy only the ids present in this graph
 	isl_id_to_id_free(sub->ref_to_array);
+	if (!sub->array_to_ref_borrowed)
+		array_to_ref_free(ctx, sub->array_to_ref);
 	sub->ref_to_array = isl_id_to_id_copy(graph->ref_to_array);
+	sub->array_to_ref = graph->array_to_ref; // FIXME: no copy for hash table?
+	sub->array_to_ref_borrowed = 1;
 	if (graph_init_id_rank_table(ctx, sub) < 0)
 		return -1;
 
