@@ -4965,50 +4965,6 @@ static int compute_maxvar(struct isl_sched_graph *graph)
 	return 0;
 }
 
-/* Drop all map constraints and add it to the the resulting union_map.
- */
-static isl_stat add_universe_map(__isl_take isl_map *map, void *user)
-{
-	isl_union_map *umap = *(isl_union_map **) user;
-	int i;
-	// int n_dim = isl_map_dim(map, isl_dim_all);
-	// map = isl_map_remove_divs(map);
-	// map = isl_map_drop_constraints_involving_dims(map,
-	// 	isl_dim_all, 0, n_dim);
-	for (i = 0; i < map->n; ++i)
-	{
-		map->p[i]->n_eq = 0;
-		map->p[i]->n_ineq = 0;
-		map->p[i]->n_div = 0;
-	}
-	umap = isl_union_map_add_map(umap, map);
-
-	*(isl_union_map **) user = umap;
-	return isl_stat_ok;
-}
-
-static __isl_give isl_union_map *universe_union_map(
-	__isl_take isl_union_map *umap)
-{
-	isl_space *space;
-	isl_union_map *result;
-	if (!umap)
-		return NULL;
-
-	space = isl_union_map_get_space(umap);
-	if (isl_union_map_n_map(umap) == 0)
-	{
-		result = isl_union_map_from_map(isl_map_universe(space));
-	}
-	else
-	{
-		result = isl_union_map_empty(space);
-		isl_union_map_foreach_map(umap, &add_universe_map, &result);
-	}
-	isl_union_map_free(umap);
-	return result;
-}
-
 /* Extract the subgraph of "graph" that consists of the node satisfying
  * "node_pred" and the edges satisfying "edge_pred" and store
  * the result in "sub".
