@@ -2745,12 +2745,12 @@ static isl_stat add_intra_spatial_proximity_constraints_single(
 	if ((r = extract_ids_from_tags(map, &id1, &id2)) < 0)
 		return r;
 
-	if (id1 != id2 && data->remove_inter_ref_deps)
-	{
-		isl_id_free(id1);
-		isl_id_free(id2);
-		return isl_stat_ok;
-	}
+	// if (id1 != id2 && data->remove_inter_ref_deps)
+	// {
+	// 	isl_id_free(id1);
+	// 	isl_id_free(id2);
+	// 	return isl_stat_ok;
+	// }
 
 	start1 = id_list_index_of(graph->id_list, id1);
 	start2 = id_list_index_of(graph->id_list, id2);
