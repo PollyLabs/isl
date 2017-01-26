@@ -3824,6 +3824,31 @@ static inline __isl_give isl_basic_map *fix_out_dims_as_params(
 	return bmap;
 }
 
+static int access_rank_hull(__isl_take isl_basic_map *bmap,
+	__isl_take isl_basic_map *partial_schedule)
+{
+	isl_basic_map *scheduled;
+	int n_in, n_out, rank;
+
+	partial_schedule = fix_out_dims_as_params(partial_schedule);
+	scheduled = isl_basic_map_apply_domain(isl_basic_map_copy(bmap),
+		partial_schedule);
+	bmap = isl_basic_map_domain_product(bmap, scheduled);
+
+	bmap = isl_basic_map_affine_hull(bmap);
+	bmap = isl_basic_map_remove_divs(bmap);
+	n_in = isl_basic_map_n_in(bmap);
+	n_out = isl_basic_map_n_out(bmap);
+	bmap = isl_basic_map_drop_constraints_not_involving_dims(bmap,
+		isl_dim_in, 0, n_in);
+	bmap = isl_basic_map_drop_constraints_not_involving_dims(bmap,
+		isl_dim_out, 0, n_out);
+	rank = bmap->n_eq;
+	isl_basic_map_debug(bmap);
+	isl_basic_map_free(bmap);
+	return rank;
+}
+
 static int access_rank(__isl_take isl_basic_map *bmap,
 	__isl_take isl_basic_map *partial_schedule)
 {
