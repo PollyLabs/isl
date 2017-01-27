@@ -8390,6 +8390,127 @@ static isl_bool ok_to_merge_proximity(isl_ctx *ctx,
 	return isl_bool_false;
 }
 
+/* Independence test: first dimension where distance is zero.
+ */
+static int outer_paralel_dim(__isl_take isl_map *dependence)
+{
+	int i, n_dim;
+	isl_map *test;
+	isl_bool r;
+
+	if (isl_map_is_empty(dependence)) {
+		isl_map_free(dependence);
+		return 0;
+	}
+
+	n_dim = isl_min(isl_map_n_in(dependence), isl_map_n_out(dependence));
+	for (i = 0; i < n_dim; ++i) {
+		test = isl_map_universe(isl_map_get_space(dependence));
+		test = isl_map_equate(test, isl_dim_out, i, isl_dim_in, i);
+		r = isl_map_is_subset(dependence, test);
+		isl_map_free(test);
+		if (r == isl_bool_error) {
+			i = -1;
+			break;
+		} else if (r == isl_bool_true) {
+			break;
+		}
+	}
+	isl_map_free(dependence);
+	return i;
+}
+
+/* Get first parallel dimension given all dependences in the graph.
+ * Returns -1 in case of error.
+ */
+static int scc_outer_parallel_dim(struct isl_sched_graph *graph)
+{
+	int i;
+	int outermost_parallel = 0, outer_parallel;
+	struct isl_sched_edge *edge;
+	isl_map *dep, *src_schedule, *dst_schedule;
+
+	for (i = 0; i < graph->n_edge; ++i) {
+		edge = &graph->edge[i];
+		src_schedule = node_extract_schedule(edge->src);
+		dst_schedule = node_extract_schedule(edge->dst);
+		dep = isl_map_copy(edge->map);
+		dep = isl_map_apply_domain(dep, src_schedule);
+		dep = isl_map_apply_range(dep, dst_schedule);
+		outer_parallel = outer_paralel_dim(dep);
+		if (outer_parallel < 0)
+			return outer_parallel;
+		if (outer_parallel > outermost_parallel)
+			outermost_parallel = outer_parallel;
+	}
+	return outermost_parallel;
+}
+
+/* Disallow merge between two SCCs with different different outermost
+ * parallel loops.
+ */
+static isl_bool ok_to_merge_parallel(isl_ctx *ctx,
+	struct isl_sched_graph *graph, struct isl_clustering *c)
+{
+	int i;
+	struct isl_sched_graph *src_scc, *dst_scc;
+	isl_space *src_space, *dst_space;
+	struct isl_sched_node *src_node, *dst_node;
+	isl_map *src_schedule, *dst_schedule, *dep;
+	int outermost_parallel = -1, outer_parallel;
+	int src_outermost_parallel, dst_outermost_parallel;
+	struct isl_sched_edge *edge;
+
+	for (i = 0; i < graph->n_edge; ++i) {
+		edge = &graph->edge[i];
+		if (!is_proximity(edge))
+			continue;
+		if (!c->scc_in_merge[edge->src->scc])
+			continue;
+		if (!c->scc_in_merge[edge->dst->scc])
+			continue;
+		if (c->scc_cluster[edge->dst->scc] ==
+		    c->scc_cluster[edge->src->scc])
+			continue;
+
+		src_space = edge->src->space;
+		dst_space = edge->dst->space;
+		src_scc = &c->scc[edge->src->scc];
+		dst_scc = &c->scc[edge->dst->scc];
+
+		src_outermost_parallel = scc_outer_parallel_dim(src_scc);
+		dst_outermost_parallel = scc_outer_parallel_dim(dst_scc);
+		if (src_outermost_parallel < 0 || dst_outermost_parallel < 0)
+			return isl_bool_error;
+		if (src_outermost_parallel != dst_outermost_parallel)
+			return isl_bool_false;
+
+		src_node = graph_find_node(ctx, src_scc, src_space);
+		dst_node = graph_find_node(ctx, dst_scc, dst_space);
+		src_schedule = node_extract_schedule(src_node);
+		dst_schedule = node_extract_schedule(dst_node);
+
+		dep = isl_map_copy(graph->edge[i].map);
+		dep = isl_map_apply_domain(dep, src_schedule);
+		dep = isl_map_apply_range(dep, dst_schedule);
+
+		isl_map_debug(dep);
+
+		outer_parallel = outer_paralel_dim(dep);
+		if (outer_parallel == -1)
+			return isl_bool_error;
+		if (outermost_parallel == -1)
+			outermost_parallel = outer_parallel;
+		if (outermost_parallel != outer_parallel)
+			return isl_bool_false;
+
+		// TODO: check which loop is parallel before and after merge
+		// problem: the straightforward merge may loose outer parallelism,
+		// but the subsequent cluster schedule will reinstate it?
+	}
+	return isl_bool_true;
+}
+
 /* Should the clusters be merged based on the cluster schedule
  * in the current (and only) band of "merge_graph"?
  * "graph" is the original dependence graph, while "c" records
