@@ -8446,8 +8446,9 @@ static int scc_outer_parallel_dim(struct isl_sched_graph *graph)
 	return outermost_parallel;
 }
 
-/* Disallow merge between two SCCs with different different outermost
- * parallel loops.
+/* Disallow merge between two SCCs if their one of them has a parallel outer
+ * loop and another does not.  Allow merging if both SCCs have parallel outer
+ * loops or sequential outer loops.
  */
 static isl_bool ok_to_merge_parallel(isl_ctx *ctx,
 	struct isl_sched_graph *graph, struct isl_clustering *c)
@@ -8482,8 +8483,13 @@ static isl_bool ok_to_merge_parallel(isl_ctx *ctx,
 		dst_outermost_parallel = scc_outer_parallel_dim(dst_scc);
 		if (src_outermost_parallel < 0 || dst_outermost_parallel < 0)
 			return isl_bool_error;
-		if (src_outermost_parallel != dst_outermost_parallel)
+
+		if ((src_outermost_parallel == src_scc->band_start) ^
+			(dst_outermost_parallel == dst_scc->band_start))
 			return isl_bool_false;
+		if ((src_outermost_parallel != src_scc->band_start) &&
+			(dst_outermost_parallel != dst_scc->band_start))
+			continue;
 
 		src_node = graph_find_node(ctx, src_scc, src_space);
 		dst_node = graph_find_node(ctx, dst_scc, dst_space);
@@ -8499,9 +8505,8 @@ static isl_bool ok_to_merge_parallel(isl_ctx *ctx,
 		outer_parallel = outer_paralel_dim(dep);
 		if (outer_parallel == -1)
 			return isl_bool_error;
-		if (outermost_parallel == -1)
-			outermost_parallel = outer_parallel;
-		if (outermost_parallel != outer_parallel)
+		if ((outer_parallel != src_scc->band_start) ||
+			(outer_parallel != dst_scc->band_start))
 			return isl_bool_false;
 
 		// TODO: check which loop is parallel before and after merge
@@ -8532,6 +8537,7 @@ static isl_bool ok_to_merge_parallel(isl_ctx *ctx,
 static isl_bool ok_to_merge(isl_ctx *ctx, struct isl_sched_graph *graph,
 	struct isl_clustering *c, struct isl_sched_graph *merge_graph)
 {
+	isl_bool ok;
 	if (merge_graph->n_total_row == merge_graph->band_start)
 		return isl_bool_false;
 
@@ -8540,12 +8546,14 @@ static isl_bool ok_to_merge(isl_ctx *ctx, struct isl_sched_graph *graph,
 		return isl_bool_false;
 
 	if (isl_options_get_schedule_maximize_coincidence(ctx)) {
-		isl_bool ok;
-
 		ok = ok_to_merge_coincident(c, merge_graph);
 		if (ok < 0 || !ok)
 			return ok;
 	}
+
+	ok = ok_to_merge_parallel(ctx, graph, c);
+	if (ok <= 0)
+		return ok;
 
 	return ok_to_merge_proximity(ctx, graph, c, merge_graph);
 }
