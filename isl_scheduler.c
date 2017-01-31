@@ -8420,8 +8420,8 @@ static int outer_paralel_dim(__isl_take isl_map *dependence)
 	return i;
 }
 
-/* Get first parallel dimension given all dependences in the graph.
- * Returns -1 in case of error.
+/* Get first parallel dimension given all validity dependences in the graph.
+ * Return -1 in case of error.
  */
 static int scc_outer_parallel_dim(struct isl_sched_graph *graph)
 {
@@ -8432,6 +8432,8 @@ static int scc_outer_parallel_dim(struct isl_sched_graph *graph)
 
 	for (i = 0; i < graph->n_edge; ++i) {
 		edge = &graph->edge[i];
+		if (!is_validity(edge))
+			continue;
 		src_schedule = node_extract_schedule(edge->src);
 		dst_schedule = node_extract_schedule(edge->dst);
 		dep = isl_map_copy(edge->map);
@@ -8499,8 +8501,6 @@ static isl_bool ok_to_merge_parallel(isl_ctx *ctx,
 		dep = isl_map_copy(graph->edge[i].map);
 		dep = isl_map_apply_domain(dep, src_schedule);
 		dep = isl_map_apply_range(dep, dst_schedule);
-
-		isl_map_debug(dep);
 
 		outer_parallel = outer_paralel_dim(dep);
 		if (outer_parallel == -1)
