@@ -1575,24 +1575,7 @@ static isl_stat extract_edge(__isl_take isl_map *map, void *user)
 
 	if (data->type == isl_edge_condition ||
 	    data->type == isl_edge_conditional_validity ||
-		data->type == isl_edge_proximity ||
-		data->type == isl_edge_spatial_proximity) {
-		if (data->type == isl_edge_proximity) {
-#if 0 // something was going on here with wrapped/tagged accesses
-//			isl_map_dump(map);
-			isl_space *space = isl_map_get_space(map);
-			space = isl_space_domain(space);
-//			isl_space_dump(space);
-			space = isl_space_unwrap(space);
-//			isl_space_dump(space);
-			char* str = isl_space_get_tuple_name(space, isl_dim_out);
-			isl_id *id = isl_space_get_tuple_id(space, isl_dim_out);
-			fprintf(stderr, "out_tuple_name on proximity edge: %s\n ", str);
-			isl_map_dump(map);
-#endif
-
-		}
-
+	    data->type == isl_edge_spatial_proximity) {
 		if (isl_map_can_zip(map)) {
 			tagged = isl_map_copy(map);
 			map = isl_set_unwrap(isl_map_domain(isl_map_zip(map)));
