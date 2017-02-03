@@ -2714,18 +2714,18 @@ static int id_list_index_of(struct isl_id_list *list, isl_id *id)
 	return -1;
 }
 
-struct add_intra_spatial_proximity_data {
+struct add_spatial_proximity_data {
 	struct isl_sched_graph *graph;
 	struct isl_sched_edge *edge;
 	isl_basic_set *coef;
 	isl_dim_map *dim_map;
 };
 
-static isl_stat add_intra_spatial_proximity_constraints_single(
+static isl_stat add_spatial_proximity_constraints_single(
 	__isl_take isl_map *map,
 	void *user)
 {
-	struct add_intra_spatial_proximity_data *data = user;
+	struct add_spatial_proximity_data *data = user;
 	struct isl_sched_graph *graph = data->graph;
 	isl_basic_set *coef = data->coef;
 	isl_dim_map *dim_map = data->dim_map;
@@ -2814,11 +2814,11 @@ static isl_stat add_intra_spatial_proximity_constraints(
 
 	if (!local) {
 		isl_union_map *spatial_proximity = edge->array_tagged_map;
-		struct add_intra_spatial_proximity_data data = {
+		struct add_spatial_proximity_data data = {
 			graph, edge, coef, dim_map
 		};
 		if (isl_union_map_foreach_map(spatial_proximity,
-				&add_intra_spatial_proximity_constraints_single,
+				&add_spatial_proximity_constraints_single,
 				&data) < 0)
 			return isl_stat_error;
 		// TODO: free dim_map...
@@ -2861,11 +2861,11 @@ static isl_stat add_inter_spatial_proximity_constraints(
 
 	dim_map = inter_dim_map(ctx, graph, src, dst, offset, -s);
 	if (!local) {
-		struct add_intra_spatial_proximity_data data = {
+		struct add_spatial_proximity_data data = {
 			graph, edge, coef, dim_map
 		};
 		if (isl_union_map_foreach_map(spatial_proximity,
-				&add_intra_spatial_proximity_constraints_single,
+				&add_spatial_proximity_constraints_single,
 				&data) < 0)
 			return isl_stat_error;
 		// TODO: free dim map properly
