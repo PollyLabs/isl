@@ -4078,7 +4078,6 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	int parametric;
 	int param_pos, total_params = 0;
 	int n_eq, n_ineq;
-	int seperate_bounding_functions = 0;
 
 	parametric = ctx->opt->schedule_parametric;
 	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
@@ -4091,51 +4090,16 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 		fprintf(stderr, "[isl] WARNING: EMPTY ID_LIST!\n\n\n");
 	}
 
-	// graph_update_rank_table(graph);
-	fprintf(stderr, "[isl] setup_lp n_ids=%d, counted acceses %d\n", n_ids,
-		isl_union_map_n_map(graph->counted_accesses));
 	if (graph_sort_id_list(graph) < 0)
 		return isl_stat_error;
-	// id_rank_table_dump(ctx, graph->id_rank_table);
-	// isl_id_list_dump(graph->id_list);
 
 	param_pos = 2 * n_ids + 2; //6/*#4*/;
-//	total = param_pos + 2 * nparam;
 	total = param_pos;
 	total += (2 * nparam + 1) * n_ids;
-
-	//fprintf(stderr, "[isl] graph n %d, edges %d, ids %d\n", graph->n, graph->n_edge, n_ids);
-	for (i = 0; i < graph->n_edge; ++i)
-	{
-		if (!is_spatial_proximity(&graph->edge[i]))
-			continue;
-		//isl_union_map_debug(graph->edge[i].array_tagged_map);
-	}
 
 	// Let's ignore plain proximity for now...
 	// Later, we may decide whether we need a separate set of
 	// bounding parameters for it.
-#if 0
-	for (i = 0; i < graph->n_edge; ++i) {
-        struct isl_sched_edge *edge = &graph->edge[i];
-		if (is_proximity(edge)) {
-			if(seperate_bounding_functions){
-				edge->start = total;
-				total += 1 + 2 * nparam;
-				edge->end = total;
-				total_params++;
-			}
-			else {
-				edge->start = total;
-				edge->end = total + 1 + 2 * nparam;
-			}
-		}
-	}
-	if (!seperate_bounding_functions) {
-		total_params = 1;
-		total += 2*nparam + 1;
-	}
-#endif
 
 	for (i = 0; i < graph->n; ++i) {
 		struct isl_sched_node *node = &graph->node[graph->sorted[i]];
@@ -4144,7 +4108,6 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 		node->start = total;
 		total += 1 + node->nparam + 2 * node->nvar;
 	}
-	//fprintf(stderr, "[isl] total %d\n", total);
 
 	if (count_constraints(graph, &n_eq, &n_ineq, use_coincidence) < 0)
 		return isl_stat_error;
@@ -4162,68 +4125,12 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	space = isl_space_set_alloc(ctx, 0, total);
 	isl_basic_set_free(graph->lp);
-	// n_eq += 2 + parametric;
 
 	// constraints for sums
 	n_eq += 2 * n_ids + parametric;
 
-#if 0
-	static int cnt = 0;
-	if (cnt < 3) {
-		fprintf(stderr, "[isl] forcing selection\n");
-		n_eq += 4;
-	}
-#endif
-
 	graph->lp = isl_basic_set_alloc_space(space, 0, n_eq, n_ineq);
 
-#if 0
-	if (cnt == 0) {
-		fix_at_zero2(graph, total, total);
-		fix_at_zero2(graph, total, total-2);
-	}
-	else if (cnt == 1) {
-		fix_at_zero2(graph, total, total-2);
-		fix_at_zero2(graph, total, total-4);
-	}
-	else if (cnt == 2) {
-		fix_at_zero2(graph, total, total-2);
-		fix_at_zero2(graph, total, total-4);
-	}
-	++cnt;
-#endif
-
-#if 0
-	if(!seperate_bounding_functions) {
-		if (add_sum_constraint(graph, 0, param_pos + 1, 2 * nparam) < 0)
-			return isl_stat_error;
-		if (add_sepreate_const_sum_constraint(graph, 1, param_pos , 1, 2*nparam + 1 ) < 0)
-			return isl_stat_error;
-	}
-	else {
-//		if (add_sepreate_param_sum_constraint(graph, 0, param_pos  , 2 * nparam + 1, total_params, 2*nparam + 1 ) < 0)
-//			return isl_stat_error;
-		if (add_sepreate_param_sum_constraint(graph, 0, param_pos + 1 , 2 * nparam , total_params, 2*nparam + 1 ) < 0)
-			return isl_stat_error;
-		if (add_sepreate_const_sum_constraint(graph, 1, param_pos , total_params, 2*nparam + 1 ) < 0)
-			return isl_stat_error;
-	}
-#endif
-	//if (add_groups_sum_constraint(graph, 0, 5, 2 * nparam, 2 * nparam + 1, graph->id_list->n) < 0)
-#if 0
-	if (add_groups_sum_constraint(graph, 0, 7/*#5*/ + 2 * nparam + 1,
-			2 * nparam, 2 * nparam + 1, graph->id_list->n - 1) < 0)
-		return isl_stat_error;
-	if (add_groups_sum_constraint(graph, 1, 7/*#5*/,
-			2 * nparam, 2 * nparam + 1, graph->id_list->n - 1) < 0)
-		return isl_stat_error;
-	if (add_groups_sum_constraint(graph, 2/*#1*/, 6/*#4*/ + 2 * nparam + 1,
-			1, 2 * nparam + 1, graph->id_list->n - 1) < 0)
-		return isl_stat_error;
-	if (add_groups_sum_constraint(graph, 3/*#1*/, 6/*#4*/,
-			1, 2 * nparam + 1, graph->id_list->n - 1) < 0)
-		return isl_stat_error;
-#endif
 	if (add_arraywise_sum_constraints(graph) < 0)
 		return isl_stat_error;
 
@@ -4235,9 +4142,6 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 		return isl_stat_error;
 	if (add_bound_coefficient_constraints(ctx, graph) < 0)
 		return isl_stat_error;
-
-	//isl_basic_set_debug(graph->lp);
-
 #if 0
 	if (add_all_proximity_constraints(graph, use_coincidence) < 0)
 		return isl_stat_error;
@@ -4246,19 +4150,6 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 		return isl_stat_error;
 	if (add_all_validity_constraints(graph, use_coincidence) < 0)
 		return isl_stat_error;
-#if 0
-	//int elems[] = {1,0,1,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1};
-	int elems[] = {1,0,0,1,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1};
-
-	isl_vec *vec = isl_vec_alloc(ctx, sizeof(elems) / sizeof(int));
-	for (int i = 0; i < sizeof(elems) / sizeof(int); ++i)
-	{
-		vec = isl_vec_set_element_si(vec, i, elems[i]);
-	}
-	isl_bool b = isl_basic_set_contains(graph->lp, vec);
-	fprintf(stderr, "[isl] LP contrains result vector %d\n", b);
-	isl_vec_free(vec);
-#endif
 
 	graph->lp = isl_basic_set_simplify(graph->lp);
 
