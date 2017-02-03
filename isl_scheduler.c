@@ -8455,7 +8455,7 @@ static int scc_outer_parallel_dim(struct isl_sched_graph *graph)
 
 	for (i = 0; i < graph->n_edge; ++i) {
 		edge = &graph->edge[i];
-		if (!is_validity(edge))
+		if (!is_coincidence(edge))
 			continue;
 		src_schedule = node_extract_schedule(edge->src);
 		dst_schedule = node_extract_schedule(edge->dst);
