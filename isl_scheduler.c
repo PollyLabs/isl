@@ -2504,8 +2504,6 @@ static isl_stat add_intra_proximity_constraints(struct isl_sched_graph *graph,
 	isl_basic_set *coef;
 	struct isl_sched_node *node = edge->src;
 
-	//isl_map_dump(map);
-
 	coef = intra_coefficients(graph, node, map, !local);
 
 	offset = coef_var_offset(coef);
@@ -2516,22 +2514,12 @@ static isl_stat add_intra_proximity_constraints(struct isl_sched_graph *graph,
 	nparam = isl_space_dim(node->space, isl_dim_param);
 	dim_map = intra_dim_map(ctx, graph, node, offset, -s);
 
-//	isl_dim_map_dump(dim_map);
 	if (!local) {
-//		isl_dim_map_range(dim_map, 1, 0, 0, 0, 1, 1);
-//		isl_dim_map_range(dim_map, 4, 2, 1, 1, nparam, -1);
-//		isl_dim_map_range(dim_map, 5, 2, 1, 1, nparam, 1);
-
-		isl_dim_map_range(dim_map, edge->start, 0, 0, 0, 1, 1);
-		isl_dim_map_range(dim_map, edge->start + 1, 2, 1, 1, nparam, -1);
-		isl_dim_map_range(dim_map, edge->start + 2, 2, 1, 1, nparam, 1);
-//	}
-//	isl_dim_map_dump(dim_map);
-	//isl_basic_map_dump(coef);
-//	isl_basic_set_dump(graph->lp);
-	graph->lp = add_constraints_dim_map(graph->lp, coef, dim_map);
-//	isl_basic_set_dump(graph->lp);
+		isl_dim_map_range(dim_map, 1, 0, 0, 0, 1, 1);
+		isl_dim_map_range(dim_map, 4, 2, 1, 1, nparam, -1);
+		isl_dim_map_range(dim_map, 5, 2, 1, 1, nparam, 1);
 	}
+	graph->lp = add_constraints_dim_map(graph->lp, coef, dim_map);
 
 	return isl_stat_ok;
 }
@@ -2606,13 +2594,9 @@ static isl_stat add_inter_proximity_constraints(struct isl_sched_graph *graph,
 	dim_map = inter_dim_map(ctx, graph, src, dst, offset, -s);
 
 	if (!local) {
-//		isl_dim_map_range(dim_map, 1, 0, 0, 0, 1, 1);
-//		isl_dim_map_range(dim_map, 4, 2, 1, 1, nparam, -1);
-//		isl_dim_map_range(dim_map, 5, 2, 1, 1, nparam, 1);
-
-		isl_dim_map_range(dim_map, edge->start, 0, 0, 0, 1, 1);
-		isl_dim_map_range(dim_map, edge->start + 1, 2, 1, 1, nparam, -1);
-		isl_dim_map_range(dim_map, edge->start + 2, 2, 1, 1, nparam, 1);
+		isl_dim_map_range(dim_map, 1, 0, 0, 0, 1, 1);
+		isl_dim_map_range(dim_map, 4, 2, 1, 1, nparam, -1);
+		isl_dim_map_range(dim_map, 5, 2, 1, 1, nparam, 1);
 	}
 
 	graph->lp = add_constraints_dim_map(graph->lp, coef, dim_map);
