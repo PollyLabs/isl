@@ -3146,56 +3146,11 @@ static isl_stat add_ids_to_hash_table(__isl_take isl_map *map, void *user)
 	return isl_stat_ok;
 }
 
-
-#if 0
-struct add_spatial_proximity_edge_data
-{
-	isl_ctx *ctx;
-	struct isl_sched_graph *graph;
-	struct isl_sched_edge *edge;
-};
-
-static isl_stat add_spatial_proximity_constraints_edge(
-	__isl_take isl_map *dep_map, void *user)
-{
-	int k, pos1, pos2;
-	isl_id *id1, *id2;
-	struct add_spatial_proximity_edge_data *data = user;
-	struct isl_sched_graph *graph = data->graph;
-
-	int total = 42; //FIXME!
-
-	// Add individual bounding constraints.
-	k = isl_basic_set_alloc_inequality(graph->lp);
-	if (k < 0)
-		return isl_stat_error;
-	isl_seq_clr(graph->lp->ineq[k], 1 + total);
-
-	// Find positions of source and target array-related variables.
-	extract_ids_from_tags(dep_map, &id1, &id2);
-	pos1 = id_list_index_of(graph->id_list, id1);
-	pos2 = id_list_index_of(graph->id_list, id2);
-	if (pos1 < 0 || pos2 < 0)
-		return isl_stat_error;
-
-	// Connect to the corresponding dimensions in the inequalities,
-	// first constant, then parameters.
-
-	// inequality for constant
-
-	// pair of inequalities for bounding the access
-
-	return isl_stat_ok;
-}
-#endif
-
 static isl_stat add_spatial_proximity_constraints(isl_ctx *ctx,
 	struct isl_sched_graph *graph, int use_coincidence)
 {
 	int i;
-	//isl_stat r;
 
-	// For each edge,
 	for (i = 0; i < graph->n_edge; ++i)
 	{
 		int local;
@@ -3218,13 +3173,6 @@ static isl_stat add_spatial_proximity_constraints(isl_ctx *ctx,
 			add_inter_spatial_proximity_constraints(
 				graph, edge, -1, local);
 		}
-#if 0
-		struct add_spatial_proximity_edge_data data = { ctx, graph, edge };
-		r = isl_union_map_foreach_map(edge->array_tagged_map,
-				&add_spatial_proximity_constraints_edge, &data);
-		if (r < 0)
-			return r;
-#endif
 	}
 
 	return isl_stat_ok;
