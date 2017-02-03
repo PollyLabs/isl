@@ -2680,7 +2680,7 @@ static int force_zero(struct isl_sched_edge *edge, int use_coincidence)
 	return is_local(edge) || (use_coincidence && is_coincidence(edge));
 }
 
-static isl_stat extract_ids_from_tags(__isl_take isl_map *map, 
+static isl_stat extract_ids_from_tags(__isl_take isl_map *map,
 	__isl_give isl_id **id1, __isl_give isl_id **id2)
 {
 	isl_space *space;
@@ -4314,8 +4314,8 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 		isl_union_map_n_map(graph->counted_accesses));
 	if (graph_sort_id_list(graph) < 0)
 		return isl_stat_error;
-	id_rank_table_dump(ctx, graph->id_rank_table);
-	isl_id_list_dump(graph->id_list);
+	// id_rank_table_dump(ctx, graph->id_rank_table);
+	// isl_id_list_dump(graph->id_list);
 
 	param_pos = 2 * n_ids + 2; //6/*#4*/;
 //	total = param_pos + 2 * nparam;
