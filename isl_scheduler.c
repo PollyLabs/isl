@@ -4088,17 +4088,6 @@ static isl_stat graph_sort_id_list(struct isl_sched_graph *graph)
 	return isl_stat_ok;
 }
 
-static void fix_at_zero2(struct isl_sched_graph *graph,
-						 int total, int pos)
-{
-	int k = isl_basic_set_alloc_equality(graph->lp);
-	isl_seq_clr(graph->lp->eq[k],total+1);
-	isl_int_set_si(graph->lp->eq[k][pos],-1);
-	k = isl_basic_set_alloc_equality(graph->lp);
-	isl_seq_clr(graph->lp->eq[k],total+1);
-	isl_int_set_si(graph->lp->eq[k][pos-1],-1);
-}
-
 /* Construct an ILP problem for finding schedule coefficients
  * that result in non-negative, but small dependence distances
  * over all dependences.
