@@ -2834,51 +2834,6 @@ static isl_stat add_intra_spatial_proximity_constraints(
 	return isl_stat_ok;
 }
 
-struct add_spatial_constraints_data {
-	struct isl_sched_graph *graph;
-	isl_basic_set *coef;
-	isl_dim_map *dim_map;
-};
-
-static isl_stat add_spatial_proximity_constraints_single(
-	__isl_take isl_map *map, void *user)
-{
-	int start, n_arrays;
-	isl_id *id1, *id2;
-	isl_stat r;
-	struct add_spatial_constraints_data *data = user;
-	struct isl_sched_graph *graph = data->graph;
-	isl_basic_set *coef = data->coef;
-	isl_dim_map *dim_map = data->dim_map;
-	unsigned nparam = isl_map_dim(map, isl_dim_param);
-	isl_ctx *ctx = isl_map_get_ctx(map);
-
-	if (!graph->id_list)
-		return isl_stat_error;
-	n_arrays = graph->id_list->n;
-
-	if ((r = extract_ids_from_tags(map, &id1, &id2)) < 0)
-		return r;
-	if (id1 != id2)
-		return isl_stat_error;
-
-	start = id_list_index_of(graph->id_list, id1);
-	if (start < 0)
-		return isl_stat_error;
-	start = start * (2 * nparam + 1) + 2 + 2 * n_arrays;
-
-	dim_map = isl_dim_map_copy(ctx, dim_map);
-	isl_dim_map_range(dim_map, start, 0, 0, 0, 1, 1);
-	isl_dim_map_range(dim_map, start + 1, 2, 1, 1, nparam, -1);
-	isl_dim_map_range(dim_map, start + 2, 2, 1, 1, nparam, 1);
-
-	graph->lp = isl_basic_set_extend_constraints(graph->lp,
-			coef->n_eq, coef->n_ineq);
-	graph->lp = isl_basic_set_add_constraints_dim_map(graph->lp,
-			isl_basic_set_copy(coef), dim_map);
-
-	return isl_stat_ok;
-}
 
 static isl_stat add_inter_spatial_proximity_constraints(
 	struct isl_sched_graph *graph,
@@ -2905,17 +2860,7 @@ static isl_stat add_inter_spatial_proximity_constraints(
 		return isl_stat_error;
 
 	dim_map = inter_dim_map(ctx, graph, src, dst, offset, -s);
-	if (!local)
-	{
-		// struct add_spatial_constraints_data data = {
-		// 	graph, coef, dim_map
-		// };
-		// if ((r = isl_union_map_foreach_map(spatial_proximity,
-		// 		&add_spatial_proximity_constraints_single, &data)) < 0)
-		// {
-		// 	isl_dim_map_free(ctx, dim_map);
-		// 	return r;
-		// }
+	if (!local) {
 		struct add_intra_spatial_proximity_data data = {
 			graph, edge, coef, dim_map
 		};
