@@ -7307,6 +7307,10 @@ static __isl_give isl_schedule_node *compute_schedule_finish_band(
  * turns out to be impossible, we fall back on the general scheme above
  * and try to carry as many dependences as possible.
  *
+ * If ctx->opt->schedule_single_outer_coincidence is set, then we stop
+ * trying to satisfy coincidence constraints after finding one dimension that
+ * satisfies them.  Following dimensions may still satisfy these conditions.
+ *
  * If "graph" contains both condition and conditional validity dependences,
  * then we need to check that that the conditional schedule constraint
  * is satisfied, i.e., there are no violated conditional validity dependences
@@ -7330,6 +7334,7 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 	int use_coincidence;
 	int force_coincidence = 0;
 	int check_conditional;
+	int continue_coincidence = 1;
 
 	if (sort_sccs(graph) < 0)
 		return isl_stat_error;
@@ -7350,6 +7355,7 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 		graph->src_scc = -1;
 		graph->dst_scc = -1;
 
+		use_coincidence = use_coincidence && continue_coincidence;
 		if (setup_lp(ctx, graph, use_coincidence) < 0)
 			return isl_stat_error;
 		sol = solve_lp(ctx, graph);
@@ -7367,6 +7373,9 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 			return isl_stat_ok;
 		}
 		coincident = !has_coincidence || use_coincidence;
+		if (ctx->opt->schedule_single_outer_coincidence && coincident)
+			continue_coincidence = 0;
+
 		if (update_schedule(graph, sol, coincident) < 0)
 			return isl_stat_error;
 
