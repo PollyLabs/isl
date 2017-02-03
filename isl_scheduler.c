@@ -2717,7 +2717,6 @@ static int id_list_index_of(struct isl_id_list *list, isl_id *id)
 struct add_intra_spatial_proximity_data {
 	struct isl_sched_graph *graph;
 	struct isl_sched_edge *edge;
-	int remove_inter_ref_deps;
 	isl_basic_set *coef;
 	isl_dim_map *dim_map;
 };
@@ -2744,13 +2743,6 @@ static isl_stat add_intra_spatial_proximity_constraints_single(
 
 	if ((r = extract_ids_from_tags(map, &id1, &id2)) < 0)
 		return r;
-
-	// if (id1 != id2 && data->remove_inter_ref_deps)
-	// {
-	// 	isl_id_free(id1);
-	// 	isl_id_free(id2);
-	// 	return isl_stat_ok;
-	// }
 
 	start1 = id_list_index_of(graph->id_list, id1);
 	start2 = id_list_index_of(graph->id_list, id2);
@@ -2823,7 +2815,7 @@ static isl_stat add_intra_spatial_proximity_constraints(
 	if (!local) {
 		isl_union_map *spatial_proximity = edge->array_tagged_map;
 		struct add_intra_spatial_proximity_data data = {
-			graph, edge, 1, coef, dim_map
+			graph, edge, coef, dim_map
 		};
 		if (isl_union_map_foreach_map(spatial_proximity,
 				&add_intra_spatial_proximity_constraints_single,
@@ -2925,7 +2917,7 @@ static isl_stat add_inter_spatial_proximity_constraints(
 		// 	return r;
 		// }
 		struct add_intra_spatial_proximity_data data = {
-			graph, edge, 0, coef, dim_map  // FIXME: play with 1-0 here
+			graph, edge, coef, dim_map
 		};
 		if (isl_union_map_foreach_map(spatial_proximity,
 				&add_intra_spatial_proximity_constraints_single,
