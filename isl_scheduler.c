@@ -1541,47 +1541,6 @@ static struct isl_sched_node *find_range_node(isl_ctx *ctx,
 	return node;
 }
 
-static isl_stat filter_deps(__isl_take isl_basic_map *bmap,
-							void *user)
-{
-	int i;
-	isl_map **map = user;
-
-	isl_space *space = isl_basic_map_get_space(bmap);
-	space = isl_space_range(space);
-	space = isl_space_unwrap(space);
-	const char *name = isl_space_get_tuple_name(space, isl_dim_out);
-	if (strcmp(name, "B") != 0) {
-		*map = isl_map_union(*map, isl_map_from_basic_map(bmap));
-		return isl_stat_ok;
-	}
-
-	isl_constraint_list *clist = isl_basic_map_get_constraint_list(bmap);
-	for (i = 0; i < clist->n; ++i) {
-		isl_val *j_coef, *cst;
-		isl_constraint *cstr = clist->p[i];
-		// isl_constraint_dump(cstr);
-		j_coef = isl_constraint_get_coefficient_val(cstr, isl_dim_in, 1);
-		cst = isl_constraint_get_constant_val(cstr);
-		if (isl_constraint_is_equality(cstr) == isl_bool_true &&
-		    isl_val_get_num_si(j_coef) == -1 &&
-			isl_val_get_num_si(cst) == -32) {
-				fprintf(stderr, "[isl] gotcha!\n");
-				return isl_stat_ok;
-		}
-		// if (isl_constraint_is_equality(cstr) == isl_bool_true &&
-		//     isl_val_get_num_si(j_coef) == -1 &&
-		//	isl_val_get_num_si(cst) == 0) {
-		//		fprintf(stderr, "[isl] gotcha!\n");
-		//		return isl_stat_ok;
-		// }
-	}
-
-	*map = isl_map_union(*map, isl_map_from_basic_map(bmap));
-
-	return isl_stat_ok;
-}
-
 /* Add a new edge to the graph based on the given map
  * and add it to data->graph->edge_table[data->type].
  * If a dependence relation of a given type happens to be identical
