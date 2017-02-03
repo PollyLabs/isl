@@ -42,6 +42,7 @@ struct isl_options {
 	int			schedule_single_outer_coincidence;
 	int			schedule_maximize_band_depth;
 	int			schedule_maximize_coincidence;
+	int			schedule_outer_typed_fusion;
 	int			schedule_split_scaled;
 	int			schedule_treat_coalescing;
 	int			schedule_separate_components;

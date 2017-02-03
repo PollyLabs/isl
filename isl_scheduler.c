@@ -8560,7 +8560,6 @@ static isl_bool ok_to_merge_parallel(isl_ctx *ctx,
 static isl_bool ok_to_merge(isl_ctx *ctx, struct isl_sched_graph *graph,
 	struct isl_clustering *c, struct isl_sched_graph *merge_graph)
 {
-	isl_bool ok;
 	if (merge_graph->n_total_row == merge_graph->band_start)
 		return isl_bool_false;
 
@@ -8569,14 +8568,16 @@ static isl_bool ok_to_merge(isl_ctx *ctx, struct isl_sched_graph *graph,
 		return isl_bool_false;
 
 	if (isl_options_get_schedule_maximize_coincidence(ctx)) {
-		ok = ok_to_merge_coincident(c, merge_graph);
+		isl_bool ok = ok_to_merge_coincident(c, merge_graph);
 		if (ok < 0 || !ok)
 			return ok;
 	}
 
-	ok = ok_to_merge_parallel(ctx, graph, c);
-	if (ok <= 0)
-		return ok;
+	if (isl_options_get_schedule_outer_typed_fusion(ctx)) {
+		isl_bool ok = ok_to_merge_parallel(ctx, graph, c);
+		if (ok < 0 || !ok)
+			return ok;
+	}
 
 	return ok_to_merge_proximity(ctx, graph, c, merge_graph);
 }
