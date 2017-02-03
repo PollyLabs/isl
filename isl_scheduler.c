@@ -3455,57 +3455,6 @@ static isl_stat add_arraywise_sum_constraints(
 }
 
 /* Add a constraint to graph->lp that equates the value at position
- * "sum_pos" to the sum of the "n" values starting at "first" for
- * multiple bounding param functions.
- */
-static isl_stat add_sepreate_param_sum_constraint(struct isl_sched_graph *graph,
-	int sum_pos, int first, int n, int n_parm_funcs, int stride)
-{
-	int i, k, j;
-	int total;
-
-	total = isl_basic_set_dim(graph->lp, isl_dim_set);
-
-	k = isl_basic_set_alloc_equality(graph->lp);
-	if (k < 0)
-		return isl_stat_error;
-	isl_seq_clr(graph->lp->eq[k], 1 +  total);
-	isl_int_set_si(graph->lp->eq[k][1 + sum_pos], -1);
-
-	for (j = 0; j < n_parm_funcs; ++j) {
-		for (i = 0; i < n; ++i)
-			isl_int_set_si(graph->lp->eq[k][1 + first + i + j*stride], 1);
-	}
-
-	return isl_stat_ok;
-}
-
-/* Add a constraint to graph->lp that equates the value at position
- * "sum_pos" to the sum of the "n" values starting at "first" for
- * multiple bounding param functions.
- */
-static isl_stat add_sepreate_const_sum_constraint(struct isl_sched_graph *graph,
-	int sum_pos, int first, int n_parm_funcs, int stride)
-{
-	int k, j;
-	int total;
-
-	total = isl_basic_set_dim(graph->lp, isl_dim_set);
-
-	k = isl_basic_set_alloc_equality(graph->lp);
-	if (k < 0)
-		return isl_stat_error;
-	isl_seq_clr(graph->lp->eq[k], 1 +  total);
-	isl_int_set_si(graph->lp->eq[k][1 + sum_pos], -1);
-
-	for (j = 0; j < n_parm_funcs; ++j) {
-		isl_int_set_si(graph->lp->eq[k][1 + first  + j*stride], 1);
-	}
-
-	return isl_stat_ok;
-}
-
-/* Add a constraint to graph->lp that equates the value at position
  * "sum_pos" to the sum of the parameter coefficients of all nodes.
  */
 static isl_stat add_param_sum_constraint(struct isl_sched_graph *graph,
