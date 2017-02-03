@@ -1674,17 +1674,8 @@ static isl_stat extract_edge(__isl_take isl_map *map, void *user)
 		graph->edge[graph->n_edge].tagged_validity =
 					isl_union_map_from_map(tagged);
 	if (data->type == isl_edge_spatial_proximity)
-	{
-		//isl_map *fmap = isl_map_empty(isl_map_get_space(tagged));
-		// fprintf(stderr, "[isl] adding spatial proximity edge\n");
-		// isl_map_foreach_basic_map(tagged, &filter_deps, &fmap);
-		// isl_map_debug(fmap);
-		// graph->edge[graph->n_edge].array_tagged_map =
-					// isl_union_map_from_map(fmap);
-
 		graph->edge[graph->n_edge].array_tagged_map =
 					isl_union_map_from_map(tagged);
-	}
 
 	edge = graph_find_matching_edge(graph, &graph->edge[graph->n_edge]);
 	if (!edge) {
@@ -2751,10 +2742,6 @@ static isl_stat add_spatial_proximity_constraints_single(
 	start1 = start1 * (2 * nparam + 1) + 2 + 2 * n_arrays;/*#4*/
 	start2 = start2 * (2 * nparam + 1) + 2 + 2 * n_arrays;/*#4*/
 
-	//fprintf(stderr, "[isl] starts %d %d\n", start1, start2);
-
-	// id1 == id2 unless we account for aliasing (which we do not)
-
 	dim_map1 = isl_dim_map_copy(ctx, dim_map);
 	isl_dim_map_range(dim_map1, start1, 0, 0, 0, 1, 1);
 	isl_dim_map_range(dim_map1, start1 + 1, 2, 1, 1, nparam, -1);
@@ -2765,9 +2752,6 @@ static isl_stat add_spatial_proximity_constraints_single(
 		isl_dim_map_range(dim_map2, start2 + 1, 2, 1, 1, nparam, -1);
 		isl_dim_map_range(dim_map2, start2 + 2, 2, 1, 1, nparam, 1);
 	}
-
-	// fprintf(stderr, "[isl] adding coefficients: ");
-	// isl_basic_set_dump(coef);
 
 	graph->lp = isl_basic_set_extend_constraints(graph->lp,
 			coef->n_eq, coef->n_ineq);
@@ -2798,11 +2782,6 @@ static isl_stat add_intra_spatial_proximity_constraints(
 	isl_ctx *ctx = isl_map_get_ctx(map);
 	struct isl_sched_node *node = edge->src;
 
-	// fprintf(stderr, "[isl] processing edge %p %d %d\n", edge,
-	//   isl_union_map_n_map(spatial_proximity), s);
-
-	// fprintf(stderr, "[isl] processing dep map");
-	// isl_map_dump(map);
 	coef = intra_coefficients(graph, node, isl_map_copy(map), !local);
 	offset = coef_var_offset(coef);
 	coef = isl_basic_set_transform_dims(coef, isl_dim_set,
@@ -2939,8 +2918,6 @@ static int add_all_proximity_constraints(struct isl_sched_graph *graph,
 {
 	int i;
 
-	//fprintf(stderr, "[isl] start adding proximity constraints %d\n", graph->n_edge);
-
 	for (i = 0; i < graph->n_edge; ++i) {
 		struct isl_sched_edge *edge = &graph->edge[i];
 		int zero;
@@ -2950,17 +2927,6 @@ static int add_all_proximity_constraints(struct isl_sched_graph *graph,
 		zero = force_zero(edge, use_coincidence);
 		if (!is_proximity(edge) && !zero)
 			continue;
-
-		if (!local) {
-			fprintf(stderr, "[isl] ignoring proximity: ");
-			isl_map_dump(edge->map);
-			continue;
-		} else {
-			fprintf(stderr, "[isl] processing conicidence: ");
-			isl_map_dump(edge->map);
-		}
-
-		//isl_map_debug(edge->map);
 
 		if (edge->src == edge->dst &&
 		    add_intra_proximity_constraints(graph, edge, 1, zero) < 0)
@@ -2977,9 +2943,6 @@ static int add_all_proximity_constraints(struct isl_sched_graph *graph,
 		    add_inter_proximity_constraints(graph, edge, -1, 0) < 0)
 			return -1;
 	}
-
-	//fprintf(stderr, "[isl] stop adding proximity constraints\n");
-
 
 	return 0;
 }
@@ -3275,8 +3238,6 @@ static isl_stat count_spatial_proximity_constraints(
 		struct isl_sched_edge *edge = &graph->edge[i];
 		if (!is_spatial_proximity(edge))
 			continue;
-
-		//fprintf(stderr, "[isl] spatial proximity edge found %p!\n", edge->array_tagged_map);
 
 		if (isl_union_map_foreach_map(edge->array_tagged_map,
 				&add_ids_to_hash_table, ids) < 0)
