@@ -3163,67 +3163,6 @@ static isl_stat add_ids_to_hash_table(__isl_take isl_map *map, void *user)
 }
 
 
-// Count inequalities for each different access.
-// TODO: the construction of graph->id_list should happen in extract_edge;
-//       the problem is that we cannot maintain a hashtable with all names there easily.
-//       Alternatively, do not use a separate list, but store in the graph
-//       a hash table of pairs (id, index/position)
-// Despite the name, this function also contructs a list of all unique array ids
-// that can be used later for setting up the LP problem.
-// We cannot use edge->start or any edge member easily because one edge may now be
-// associated with multiple array_tagged maps having different array names.x`
-static isl_stat count_spatial_proximity_constraints(
-	struct isl_sched_graph *graph, int *n_eq, int *n_ineq)
-{
-	int i;
-	unsigned n_param;
-	isl_ctx *ctx;
-	struct isl_hash_table *ids;
-
-	isl_id_list *id_list = NULL;
-
-	if (!graph || !n_ineq)
-		return isl_stat_error;
-
-	if (graph->n_edge == 0)
-		return isl_stat_ok;
-
-	n_param = isl_map_dim(graph->edge[0].map, isl_dim_param);
-	ctx = isl_map_get_ctx(graph->edge[0].map);
-	ids = isl_hash_table_alloc(ctx, graph->n_edge);
-
-	for (i = 0; i < graph->n_edge; ++i)
-	{
-		struct isl_sched_edge *edge = &graph->edge[i];
-		if (!is_spatial_proximity(edge))
-			continue;
-
-		if (isl_union_map_foreach_map(edge->array_tagged_map,
-				&add_ids_to_hash_table, ids) < 0)
-			goto error;
-	}
-
-
-	*n_ineq += ids->n * (2 * n_param + 1); // TODO: should probably be nvar here,
-										   // coming from the dimensionality of
-										   // the array (or the node containing
-										   // the access 'cause we connect to
-										   // scheduled dimensions)
-
-	id_list = isl_id_list_alloc(ctx, ids->n);
-	if (isl_hash_table_foreach(ctx, ids, add_id_to_list, &id_list) < 0)
-		goto error;
-	graph->id_list = id_list;
-
-	isl_hash_table_free(ctx, ids);
-	return isl_stat_ok;
-
-error:
-	isl_id_list_free(id_list);
-	isl_hash_table_free(ctx, ids);
-	return isl_stat_error;
-}
-
 #if 0
 struct add_spatial_proximity_edge_data
 {
@@ -4144,10 +4083,7 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	parametric = ctx->opt->schedule_parametric;
 	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
 
-	// int n_eq2 = 0;
-	// int n_ineq2 = 0;
 	int n_ids = 0;
-	// count_spatial_proximity_constraints(graph, &n_eq2, &n_ineq2);
 	if (graph->id_list)
 	{
 		n_ids = graph->id_list->n;
