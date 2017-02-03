@@ -928,6 +928,33 @@ static isl_bool graph_has_validity_edge(struct isl_sched_graph *graph,
 	return graph_has_edge(graph, isl_edge_conditional_validity, src, dst);
 }
 
+
+/* Does "graph" contain any coincidence edge?
+ */
+static int has_any_coincidence(struct isl_sched_graph *graph)
+{
+	int i;
+
+	for (i = 0; i < graph->n_edge; ++i)
+		if (is_coincidence(&graph->edge[i]))
+			return 1;
+
+	return 0;
+}
+
+/* Does "graph" contain any spatial proximity edge?
+ */
+static int has_any_spatial_proximity(struct isl_sched_graph *graph)
+{
+	int i;
+
+	for (i = 0; i < graph->n_edge; ++i)
+		if (is_spatial_proximity(&graph->edge[i]))
+			return 1;
+
+	return 0;
+}
+
 static int graph_alloc(isl_ctx *ctx, struct isl_sched_graph *graph,
 	int n_node, int n_edge)
 {
@@ -2499,8 +2526,8 @@ static isl_stat add_intra_proximity_constraints(struct isl_sched_graph *graph,
 
 	if (!local) {
 		isl_dim_map_range(dim_map, 1, 0, 0, 0, 1, 1);
-		isl_dim_map_range(dim_map, 4, 2, 1, 1, nparam, -1);
-		isl_dim_map_range(dim_map, 5, 2, 1, 1, nparam, 1);
+		isl_dim_map_range(dim_map, 5, 2, 1, 1, nparam, -1);
+		isl_dim_map_range(dim_map, 6, 2, 1, 1, nparam, 1);
 	}
 	graph->lp = add_constraints_dim_map(graph->lp, coef, dim_map);
 
@@ -2578,8 +2605,8 @@ static isl_stat add_inter_proximity_constraints(struct isl_sched_graph *graph,
 
 	if (!local) {
 		isl_dim_map_range(dim_map, 1, 0, 0, 0, 1, 1);
-		isl_dim_map_range(dim_map, 4, 2, 1, 1, nparam, -1);
-		isl_dim_map_range(dim_map, 5, 2, 1, 1, nparam, 1);
+		isl_dim_map_range(dim_map, 5, 2, 1, 1, nparam, -1);
+		isl_dim_map_range(dim_map, 6, 2, 1, 1, nparam, 1);
 	}
 
 	graph->lp = add_constraints_dim_map(graph->lp, coef, dim_map);
@@ -3397,7 +3424,7 @@ static isl_stat add_groups_sum_constraint(
 }
 
 static isl_stat add_arraywise_sum_constraints(
-	struct isl_sched_graph *graph)
+	struct isl_sched_graph *graph, int spatial_locality)
 {
 	int i, nparam, param_pos, n;
 
@@ -3405,8 +3432,12 @@ static isl_stat add_arraywise_sum_constraints(
 	if (!graph->id_list)
 		return isl_stat_ok;
 
+	if (spatial_locality)
+		n = graph->id_list->n;
+	else
+		n = 1;
+
 	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
-	n = graph->id_list->n;
 	param_pos = 2 * n + 2;
 
 	for (i = 0; i < n; ++i)
@@ -3960,6 +3991,7 @@ static isl_stat graph_sort_id_list(struct isl_sched_graph *graph)
  *	- sum of all c_n coefficients
  *		(unconstrained when computing non-parametric schedules)
  *	- sum of positive and negative parts of all c_x coefficients
+ *	- (temporarily!) m_0
  *	- positive and negative parts of m_n coefficients
  *	- for each node
  *		- positive and negative parts of c_i_x, in opposite order
@@ -3991,30 +4023,29 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	unsigned total;
 	isl_space *space;
 	int parametric;
+	int spatial_locality;
 	int param_pos, total_params = 0;
 	int n_eq, n_ineq;
+	int n_ids = 0;
 
 	parametric = ctx->opt->schedule_parametric;
 	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
+	spatial_locality = has_any_spatial_proximity(graph) == isl_bool_true;
 
-	int n_ids = 0;
-	if (graph->id_list)
-	{
-		n_ids = graph->id_list->n;
-	} else {
-		fprintf(stderr, "[isl] WARNING: EMPTY ID_LIST!\n\n\n");
-	}
-
-	if (graph_sort_id_list(graph) < 0)
+	if (!graph->id_list)
 		return isl_stat_error;
 
-	param_pos = 2 * n_ids + 2; //6/*#4*/;
+	if (spatial_locality) {
+		n_ids = graph->id_list->n;
+	} else {
+		n_ids = 1;
+	}
+	param_pos = 2 * n_ids + 2;
 	total = param_pos;
 	total += (2 * nparam + 1) * n_ids;
 
-	// Let's ignore plain proximity for now...
-	// Later, we may decide whether we need a separate set of
-	// bounding parameters for it.
+	if (graph_sort_id_list(graph) < 0)
+		return isl_stat_error;
 
 	for (i = 0; i < graph->n; ++i) {
 		struct isl_sched_node *node = &graph->node[graph->sorted[i]];
@@ -4046,23 +4077,28 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	graph->lp = isl_basic_set_alloc_space(space, 0, n_eq, n_ineq);
 
-	if (add_arraywise_sum_constraints(graph) < 0)
-		return isl_stat_error;
+	// if (spatial_locality)
+		if (add_arraywise_sum_constraints(graph, spatial_locality) < 0)
+			return isl_stat_error;
+	// else
+	// 	if (add_sum_constraint(graph, 0, param_pos + 1, 2 * nparam) < 0)
+	// 		return isl_stat_error;
 
-	if (parametric && add_param_sum_constraint(graph, param_pos - 2/*#2*/) < 0)
+	if (parametric && add_param_sum_constraint(graph, param_pos - 2) < 0)
 		return isl_stat_error;
-	if (add_var_sum_constraint(graph, param_pos - 1/*#3*/) < 0)
+	if (add_var_sum_constraint(graph, param_pos - 1) < 0)
 		return isl_stat_error;
 	if (add_bound_constant_constraints(ctx, graph) < 0)
 		return isl_stat_error;
 	if (add_bound_coefficient_constraints(ctx, graph) < 0)
 		return isl_stat_error;
-#if 0
-	if (add_all_proximity_constraints(graph, use_coincidence) < 0)
-		return isl_stat_error;
-#endif
-	if (add_spatial_proximity_constraints(ctx, graph, use_coincidence) < 0)
-		return isl_stat_error;
+
+	if (!spatial_locality)
+		if (add_all_proximity_constraints(graph, use_coincidence) < 0)
+			return isl_stat_error;
+	else
+		if (add_spatial_proximity_constraints(ctx, graph, use_coincidence) < 0)
+			return isl_stat_error;
 	if (add_all_validity_constraints(graph, use_coincidence) < 0)
 		return isl_stat_error;
 
@@ -4166,9 +4202,9 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 	int i;
 	isl_vec *sol;
 	isl_basic_set *lp;
-	int n_op = 0;
+	int n_op = 2;
 
-	if (graph->id_list)
+	if (has_any_spatial_proximity(graph) == isl_bool_true)
 		n_op = graph->id_list->n * 2;
 	for (i = 0; i < graph->n; ++i) {
 		struct isl_sched_node *node = &graph->node[i];
@@ -4182,7 +4218,7 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 		graph->region[i].trivial = trivial;
 	}
 	lp = isl_basic_set_copy(graph->lp);
-	sol = isl_tab_basic_set_non_trivial_lexmin(lp, n_op/*#2*/, graph->n,
+	sol = isl_tab_basic_set_non_trivial_lexmin(lp, n_op, graph->n,
 				       graph->region, &check_conflict, graph);
 	for (i = 0; i < graph->n; ++i)
 		isl_mat_free(graph->region[i].trivial);
@@ -6645,19 +6681,6 @@ static int need_condition_check(struct isl_sched_graph *graph)
 	}
 
 	return any_condition && any_conditional_validity;
-}
-
-/* Does "graph" contain any coincidence edge?
- */
-static int has_any_coincidence(struct isl_sched_graph *graph)
-{
-	int i;
-
-	for (i = 0; i < graph->n_edge; ++i)
-		if (is_coincidence(&graph->edge[i]))
-			return 1;
-
-	return 0;
 }
 
 /* Extract the final schedule row as a map with the iteration domain
