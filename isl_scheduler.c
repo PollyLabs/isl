@@ -3979,7 +3979,7 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	parametric = ctx->opt->schedule_parametric;
 	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
-	spatial_locality = has_any_spatial_proximity(graph) == isl_bool_true;
+	spatial_locality = has_any_spatial_proximity(graph);
 
 	if (!graph->id_list)
 		return isl_stat_error;
@@ -4042,12 +4042,13 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	if (add_bound_coefficient_constraints(ctx, graph) < 0)
 		return isl_stat_error;
 
-	if (!spatial_locality)
+	if (!spatial_locality) {
 		if (add_all_proximity_constraints(graph, use_coincidence) < 0)
 			return isl_stat_error;
-	else
+	} else {
 		if (add_spatial_proximity_constraints(ctx, graph, use_coincidence) < 0)
 			return isl_stat_error;
+	}
 	if (add_all_validity_constraints(graph, use_coincidence) < 0)
 		return isl_stat_error;
 
