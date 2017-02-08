@@ -1083,6 +1083,26 @@ __isl_give isl_schedule_tree *isl_schedule_tree_band_set_permutable(
 	return tree;
 }
 
+/* Permute members of the band tree root according to "order".
+ */
+__isl_give isl_schedule_tree *isl_schedule_tree_band_permute(
+	__isl_take isl_schedule_tree *tree, int *order)
+{
+	if (!tree)
+		return tree;
+	if (tree->type != isl_schedule_node_band)
+		isl_die(isl_schedule_tree_get_ctx(tree), isl_error_invalid,
+			"not a band node", return isl_schedule_tree_free(tree));
+	tree = isl_schedule_tree_cow(tree);
+	if (!tree)
+		return NULL;
+
+	tree->band = isl_schedule_band_permute(tree->band, order);
+	if (!tree->band)
+		return isl_schedule_tree_free(tree);
+	return tree;
+}
+
 /* Return the schedule space of the band tree root.
  */
 __isl_give isl_space *isl_schedule_tree_band_get_space(

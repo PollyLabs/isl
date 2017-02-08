@@ -123,6 +123,8 @@ isl_bool isl_schedule_node_band_get_permutable(
 	__isl_keep isl_schedule_node *node);
 __isl_give isl_schedule_node *isl_schedule_node_band_set_permutable(
 	__isl_take isl_schedule_node *node, int permutable);
+__isl_give isl_schedule_node *isl_schedule_node_band_permute(
+	__isl_take isl_schedule_node *node, int *order);
 
 isl_stat isl_options_set_tile_scale_tile_loops(isl_ctx *ctx, int val);
 int isl_options_get_tile_scale_tile_loops(isl_ctx *ctx);

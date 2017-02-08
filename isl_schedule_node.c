@@ -1527,6 +1527,23 @@ __isl_give isl_schedule_node *isl_schedule_node_band_set_permutable(
 	return node;
 }
 
+/* Reorder members of the band node "node" according to the given "order".
+ */
+__isl_give isl_schedule_node *isl_schedule_node_band_permute(
+	__isl_take isl_schedule_node *node, int *order)
+{
+	isl_schedule_tree *tree;
+
+	if (!node)
+		return NULL;
+
+	tree = isl_schedule_tree_copy(node->tree);
+	tree = isl_schedule_tree_band_permute(tree, order);
+	node = isl_schedule_node_graft_tree(node, tree);
+
+	return node;
+}
+
 /* Return the schedule space of the band node.
  */
 __isl_give isl_space *isl_schedule_node_band_get_space(

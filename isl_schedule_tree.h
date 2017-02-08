@@ -188,6 +188,8 @@ isl_bool isl_schedule_tree_band_get_permutable(
 	__isl_keep isl_schedule_tree *tree);
 __isl_give isl_schedule_tree *isl_schedule_tree_band_set_permutable(
 	__isl_take isl_schedule_tree *tree, int permutable);
+__isl_give isl_schedule_tree *isl_schedule_tree_band_permute(
+	__isl_take isl_schedule_tree *tree, int *order);
 
 int isl_schedule_tree_has_children(__isl_keep isl_schedule_tree *tree);
 int isl_schedule_tree_n_children(__isl_keep isl_schedule_tree *tree);

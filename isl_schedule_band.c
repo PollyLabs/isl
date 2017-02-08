@@ -11,6 +11,8 @@
  */
 
 #include <string.h>
+#include <isl_map_private.h>
+#include <isl_seq.h>
 #include <isl/map.h>
 #include <isl/schedule_node.h>
 #include <isl_schedule_band.h>
@@ -289,6 +291,95 @@ __isl_give isl_schedule_band *isl_schedule_band_set_permutable(
 	band->permutable = permutable;
 
 	return band;
+}
+
+/* Permute members of the "band" so that i-th member moves to position
+ * "order[i]".
+ * "order" is an array of unique non-negative zero-based positions.
+ * No consistency check is performed on it.
+ */
+__isl_give isl_schedule_band *isl_schedule_band_permute(
+	__isl_take isl_schedule_band *band, int *order)
+{
+	int i, n_param, pos_in, pos_out;
+	isl_ctx *ctx;
+	isl_space *space;
+	isl_basic_map *reorder_map;
+	isl_union_map *umap;
+	isl_union_set *schedule_uset;
+	isl_set *schedule_set;
+	int *permuted_coincidence;
+	enum isl_ast_loop_type *permuted_loop_type;
+	enum isl_ast_loop_type *permuted_isolate_loop_type;
+
+	if (!band || !order)
+		return band;
+
+	if (!band->permutable)
+		return isl_schedule_band_free(band);
+
+	ctx = isl_schedule_band_get_ctx(band);
+	umap = isl_union_map_from_multi_union_pw_aff(band->mupa);
+	schedule_uset = isl_union_map_range(isl_union_map_copy(umap));
+	schedule_set = isl_set_from_union_set(schedule_uset);
+	space = isl_set_get_space(schedule_set);
+	space = isl_space_map_from_domain_and_range(space, isl_space_copy(space));
+	n_param = isl_space_dim(space, isl_dim_param);
+	pos_in = 1 + n_param;
+	pos_out = 1 + n_param + band->n;
+	isl_set_free(schedule_set);
+
+	reorder_map = isl_basic_map_alloc_space(space, 0, band->n, 0);
+
+	for (i = 0; i < band->n; ++i) {
+		int k = isl_basic_map_alloc_equality(reorder_map);
+		isl_seq_clr(reorder_map->eq[k], 2 * band->n + 1);
+
+		isl_int_set_si(reorder_map->eq[k][pos_in + i], 1);
+		isl_int_set_si(reorder_map->eq[k][pos_out + order[i]], -1);
+	}
+
+	umap = isl_union_map_apply_range(umap,
+		isl_union_map_from_basic_map(reorder_map));
+	band->mupa = isl_multi_union_pw_aff_from_union_map(umap);
+
+	if (!band->mupa)
+		goto error;
+
+	permuted_coincidence = isl_calloc_array(ctx, int, band->n);
+	if (!permuted_coincidence)
+		goto error;
+	for (i = 0; i < band->n; ++i)
+		permuted_coincidence[order[i]] = band->coincident[i];
+	free(band->coincident);
+	band->coincident = permuted_coincidence;
+
+	if (band->loop_type) {
+		permuted_loop_type = isl_calloc_array(ctx,
+			enum isl_ast_loop_type, band->n);
+		if (!permuted_loop_type)
+			goto error;
+		for (i = 0; i < band->n; ++i)
+			permuted_loop_type[order[i]] = band->loop_type[i];
+		free(band->loop_type);
+		band->loop_type = permuted_loop_type;
+	}
+
+	if (band->isolate_loop_type) {
+		permuted_isolate_loop_type = isl_calloc_array(ctx,
+			enum isl_ast_loop_type, band->n);
+		if (!permuted_isolate_loop_type)
+			goto error;
+		for (i = 0; i < band->n; ++i)
+			permuted_isolate_loop_type[order[i]] = band->isolate_loop_type[i];
+		free(band->isolate_loop_type);
+		band->isolate_loop_type = permuted_isolate_loop_type;
+	}
+
+	return band;
+
+error:
+	return isl_schedule_band_free(band);
 }
 
 /* Is the band node "node" anchored?  That is, does it reference
