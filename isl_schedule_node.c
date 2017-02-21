@@ -2344,6 +2344,18 @@ error:
 	return NULL;
 }
 
+/* Replace the schedule tree of the node "node" with the tree of the "donor"
+ * node updating ancestors to preserve consistency.
+ */
+__isl_give isl_schedule_node *isl_schedule_node_replace_tree(
+	__isl_take isl_schedule_node *node, __isl_take isl_schedule_node *donor)
+{
+	node = isl_schedule_node_graft_tree(node, donor->tree);
+	donor->tree = NULL;
+	isl_schedule_node_free(donor);
+	return node;
+}
+
 /* Make sure we can insert a node between "node" and its parent.
  * Return -1 on error, reporting the reason why we cannot insert a node.
  */
