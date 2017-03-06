@@ -50,6 +50,8 @@ struct isl_options {
 	unsigned		schedule_algorithm;
 	int			schedule_carry_self;
 	int			schedule_serialize_sccs;
+	int			schedule_spatial_fusion;
+	int			schedule_spatial_distance;
 
 	int			tile_scale_tile_loops;
 	int			tile_shift_point_loops;

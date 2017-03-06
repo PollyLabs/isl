@@ -7073,12 +7073,18 @@ static int bad_cluster(struct isl_sched_graph *graph)
 		graph->n_total_row == graph->band_start;
 }
 
-/* Is "edge" a proximity edge with a non-empty dependence relation?
+/* Is "edge" a proximity edge with a non-empty dependence relation,
+ * or a spatial proximity edge when spatial fusion is enabled?
  */
 static isl_bool is_non_empty_proximity(struct isl_sched_edge *edge)
 {
-	if (!is_proximity(edge))
+	if (is_spatial_proximity(edge)) {
+		isl_ctx *ctx = isl_map_get_ctx(edge->map);
+		if (!isl_options_get_schedule_spatial_fusion(ctx))
+			return isl_bool_false;
+	} else if (!is_proximity(edge)) {
 		return isl_bool_false;
+	}
 	return isl_bool_not(isl_map_plain_is_empty(edge->map));
 }
 
@@ -7783,20 +7789,26 @@ static __isl_give isl_map *extract_node_transformation(isl_ctx *ctx,
 
 /* Give a set of distances "set", are they bounded by a small constant
  * in direction "pos"?
- * In practice, check if they are bounded by 2 by checking that there
- * are no elements with a value greater than or equal to 3 or
- * smaller than or equal to -3.
+ * In practice, check if they are bounded by options->schedule_spatial_distance
+ * by checking that there  are no elements with a value greater than or equal
+ * to options->schedule_spatial_distance+1 or smaller than or equal to
+ * -options->schedule_spatial_distance-1.
  */
 static isl_bool distance_is_bounded(__isl_keep isl_set *set, int pos)
 {
 	isl_bool bounded;
 	isl_set *test;
+	int limit;
+	isl_ctx *ctx;
 
 	if (!set)
 		return isl_bool_error;
 
+	ctx = isl_set_get_ctx(set);
+	limit = isl_options_get_schedule_spatial_distance(ctx);
+
 	test = isl_set_copy(set);
-	test = isl_set_lower_bound_si(test, isl_dim_set, pos, 3);
+	test = isl_set_lower_bound_si(test, isl_dim_set, pos, limit + 1);
 	bounded = isl_set_is_empty(test);
 	isl_set_free(test);
 
@@ -7804,7 +7816,7 @@ static isl_bool distance_is_bounded(__isl_keep isl_set *set, int pos)
 		return bounded;
 
 	test = isl_set_copy(set);
-	test = isl_set_upper_bound_si(test, isl_dim_set, pos, -3);
+	test = isl_set_upper_bound_si(test, isl_dim_set, pos, -limit - 1);
 	bounded = isl_set_is_empty(test);
 	isl_set_free(test);
 
@@ -7953,8 +7965,10 @@ static isl_bool ok_to_merge_proximity(isl_ctx *ctx,
 	for (i = 0; i < graph->n_edge; ++i) {
 		struct isl_sched_edge *edge = &graph->edge[i];
 		isl_bool bounded;
+		int use_edge = is_proximity(edge) || (is_spatial_proximity(edge) &&
+			isl_options_get_schedule_spatial_fusion(ctx));
 
-		if (!is_proximity(edge))
+		if (!use_edge)
 			continue;
 		if (!c->scc_in_merge[edge->src->scc])
 			continue;
@@ -7965,6 +7979,7 @@ static isl_bool ok_to_merge_proximity(isl_ctx *ctx,
 			continue;
 		bounded = has_bounded_distances(ctx, edge, graph, c,
 						merge_graph);
+
 		if (bounded < 0 || bounded)
 			return bounded;
 	}
@@ -8048,7 +8063,10 @@ static isl_bool ok_to_merge_parallel(isl_ctx *ctx,
 
 	for (i = 0; i < graph->n_edge; ++i) {
 		edge = &graph->edge[i];
-		if (!is_proximity(edge))
+		int use_edge = is_proximity(edge) || (is_spatial_proximity(edge) &&
+			isl_options_get_schedule_spatial_fusion(ctx));
+
+		if (!use_edge)
 			continue;
 		if (!c->scc_in_merge[edge->src->scc])
 			continue;

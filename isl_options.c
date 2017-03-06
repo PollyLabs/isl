@@ -182,6 +182,13 @@ ISL_ARG_BOOL(struct isl_options, schedule_carry_self, 0,
 ISL_ARG_BOOL(struct isl_options, schedule_serialize_sccs, 0,
 	"schedule-serialize-sccs", 0,
 	"serialize strongly connected components in dependence graph")
+ISL_ARG_BOOL(struct isl_options, schedule_spatial_fusion, 0,
+	"schedule-spatial-fusion", 0,
+	"include spatial locality dependences for loop fusion")
+ISL_ARG_INT(struct isl_options, schedule_spatial_distance, 0,
+	"schedule-spatial-distance", "distance", 3,
+	"distance in number of iterations at which two instances "
+	"are considered to feature spatial locality")
 ISL_ARG_PHANTOM_USER_CHOICE_F(0, "schedule-fuse", fuse, &set_fuse,
 	ISL_SCHEDULE_FUSE_MAX, "level of fusion during scheduling",
 	ISL_ARG_HIDDEN)
@@ -323,6 +330,16 @@ ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_serialize_sccs)
 ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_serialize_sccs)
+
+ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_spatial_fusion)
+ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_spatial_fusion)
+
+ISL_CTX_SET_INT_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_spatial_distance)
+ISL_CTX_GET_INT_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_spatial_distance)
 
 ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	tile_scale_tile_loops)
