@@ -54,6 +54,8 @@ __isl_give isl_space *isl_ast_build_get_schedule_space(
 	__isl_keep isl_ast_build *build);
 __isl_give isl_union_map *isl_ast_build_get_schedule(
 	__isl_keep isl_ast_build *build);
+__isl_give isl_schedule_node *isl_ast_build_get_schedule_node(
+	__isl_keep isl_ast_build *build);
 
 __isl_give isl_ast_build *isl_ast_build_restrict(
 	__isl_take isl_ast_build *build, __isl_take isl_set *set);
