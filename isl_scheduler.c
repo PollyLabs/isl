@@ -4022,7 +4022,7 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	isl_basic_set_free(graph->lp);
 
 	// constraints for sums
-	n_eq += 2 * n_ids + parametric;
+	n_eq += 2 * n_ids + parametric + 40;
 
 	graph->lp = isl_basic_set_alloc_space(space, 0, n_eq, n_ineq);
 
