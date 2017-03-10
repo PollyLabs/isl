@@ -3979,7 +3979,8 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	parametric = ctx->opt->schedule_parametric;
 	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
-	spatial_locality = has_any_spatial_proximity(graph);
+	spatial_locality = has_any_spatial_proximity(graph) &&
+		graph->n_row != graph->maxvar - 1;
 
 	if (!graph->id_list)
 		return isl_stat_error;
