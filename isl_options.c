@@ -152,6 +152,10 @@ ISL_ARG_BOOL(struct isl_options, schedule_single_outer_coincidence, 0,
 	"schedule-single-outer-coincidence", 0,
 	"after finding one band member that satisfies coinciednce constraints "
 	"stop trying to enforce them for other members")
+ISL_ARG_BOOL(struct isl_options, schedule_avoid_inner_coincidence, 0,
+	"schedule-avoid-inner-coincidence", 0,
+	"do not minimize coincidence constraints to 0 in the for the two "
+	"last dimensions of a band")
 ISL_ARG_BOOL(struct isl_options, schedule_maximize_band_depth, 0,
 	"schedule-maximize-band-depth", 0,
 	"maximize the number of scheduling dimensions in a band")
@@ -315,6 +319,11 @@ ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_single_outer_coincidence)
 ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_single_outer_coincidence)
+
+ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_avoid_inner_coincidence)
+ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_avoid_inner_coincidence)
 
 ISL_CTX_SET_CHOICE_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_algorithm)

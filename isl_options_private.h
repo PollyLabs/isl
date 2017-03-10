@@ -40,6 +40,7 @@ struct isl_options {
 	int			schedule_parametric;
 	int			schedule_outer_coincidence;
 	int			schedule_single_outer_coincidence;
+	int			schedule_avoid_inner_coincidence;
 	int			schedule_maximize_band_depth;
 	int			schedule_maximize_coincidence;
 	int			schedule_outer_typed_fusion;
