@@ -6923,9 +6923,11 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 			return isl_stat_error;
 		if (sol->size == 0) {
 			int empty = graph->n_total_row == graph->band_start;
+			int remaining = graph->maxvar - graph->n_row;
 
 			isl_vec_free(sol);
-			if (use_coincidence && (!force_coincidence || !empty)) {
+			if (use_coincidence &&
+			    (!force_coincidence || !empty || remaining <= 2)) {
 				use_coincidence = 0;
 				continue;
 			}
