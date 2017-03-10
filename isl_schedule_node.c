@@ -1566,6 +1566,24 @@ __isl_give isl_multi_union_pw_aff *isl_schedule_node_band_get_partial_schedule(
 	return isl_schedule_tree_band_get_partial_schedule(node->tree);
 }
 
+/* Change the schedule of the band node in isolation.  Return the updated node.
+ */
+__isl_give isl_schedule_node *isl_schedule_node_band_set_partial_schedule(
+	__isl_take isl_schedule_node *node,
+	__isl_take isl_multi_union_pw_aff *schedule)
+{
+	isl_schedule_tree *tree;
+
+	if (!node)
+		return NULL;
+
+	tree = isl_schedule_tree_copy(node->tree);
+	tree = isl_schedule_tree_band_set_partial_schedule(tree, schedule);
+	node = isl_schedule_node_graft_tree(node, tree);
+
+	return node;
+}
+
 /* Return the schedule of the band node in isolation in the form of
  * an isl_union_map.
  *
