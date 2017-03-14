@@ -53,6 +53,7 @@ struct isl_options {
 	int			schedule_serialize_sccs;
 	int			schedule_spatial_fusion;
 	int			schedule_spatial_distance;
+	int			schedule_keep_proximity;
 
 	int			tile_scale_tile_loops;
 	int			tile_shift_point_loops;

@@ -4406,6 +4406,47 @@ static __isl_give isl_union_map *intersect_domains(
 	return umap;
 }
 
+int node_any(struct isl_sched_node *node, int data)
+{
+	(void) data;
+	if (!node)
+		return 0;
+	return 1;
+}
+
+
+/* Return the union of the universe domains of the nodes in "graph"
+ * that satisfy "pred".
+ */
+static __isl_give isl_union_set *isl_sched_graph_domain(isl_ctx *ctx,
+	struct isl_sched_graph *graph,
+	int (*pred)(struct isl_sched_node *node, int data), int data)
+{
+	int i;
+	isl_set *set;
+	isl_union_set *dom;
+
+	for (i = 0; i < graph->n; ++i)
+		if (pred(&graph->node[i], data))
+			break;
+
+	if (i >= graph->n)
+		isl_die(ctx, isl_error_internal,
+			"empty component", return NULL);
+
+	set = isl_set_universe(isl_space_copy(graph->node[i].space));
+	dom = isl_union_set_from_set(set);
+
+	for (i = i + 1; i < graph->n; ++i) {
+		if (!pred(&graph->node[i], data))
+			continue;
+		set = isl_set_universe(isl_space_copy(graph->node[i].space));
+		dom = isl_union_set_union(dom, isl_union_set_from_set(set));
+	}
+
+	return dom;
+}
+
 /* Update the dependence relation of the given edge based
  * on the current schedule.
  * If the dependence is carried completely by the current schedule, then
@@ -4415,8 +4456,22 @@ static __isl_give isl_union_map *intersect_domains(
 static int update_edge(struct isl_sched_graph *graph,
 	struct isl_sched_edge *edge)
 {
-	int empty;
+	int empty, outside_domain = 0, remove;
 	isl_map *id;
+	isl_ctx *ctx = isl_map_get_ctx(edge->map);
+	isl_union_set *domain;
+	isl_union_map *umap;
+	int keep_proximity = ctx->opt->schedule_keep_proximity;
+
+	if (keep_proximity) {
+		domain = isl_sched_graph_domain(ctx, graph, &node_any, 0);
+		umap = isl_union_map_from_map(isl_map_copy(edge->map));
+		umap = isl_union_map_intersect_domain(umap,
+			isl_union_set_copy(domain));
+		umap = isl_union_map_intersect_range(umap, domain);
+		outside_domain = isl_union_map_is_empty(umap);
+		isl_union_map_free(umap);
+	}
 
 	id = specializer(edge->src, edge->dst);
 	edge->map = isl_map_intersect(edge->map, isl_map_copy(id));
@@ -4445,7 +4500,11 @@ static int update_edge(struct isl_sched_graph *graph,
 	empty = isl_map_plain_is_empty(edge->map);
 	if (empty < 0)
 		goto error;
-	if (empty)
+
+	remove = outside_domain || (!keep_proximity && empty) ||
+		(keep_proximity && empty &&
+		 !is_proximity(edge) && !is_spatial_proximity(edge));
+	if (remove)
 		graph_remove_edge(graph, edge);
 
 	isl_map_free(id);
