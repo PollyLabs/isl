@@ -4692,38 +4692,6 @@ static void next_band(struct isl_sched_graph *graph)
 	graph->band_start = graph->n_total_row;
 }
 
-/* Return the union of the universe domains of the nodes in "graph"
- * that satisfy "pred".
- */
-static __isl_give isl_union_set *isl_sched_graph_domain(isl_ctx *ctx,
-	struct isl_sched_graph *graph,
-	int (*pred)(struct isl_sched_node *node, int data), int data)
-{
-	int i;
-	isl_set *set;
-	isl_union_set *dom;
-
-	for (i = 0; i < graph->n; ++i)
-		if (pred(&graph->node[i], data))
-			break;
-
-	if (i >= graph->n)
-		isl_die(ctx, isl_error_internal,
-			"empty component", return NULL);
-
-	set = isl_set_universe(isl_space_copy(graph->node[i].space));
-	dom = isl_union_set_from_set(set);
-
-	for (i = i + 1; i < graph->n; ++i) {
-		if (!pred(&graph->node[i], data))
-			continue;
-		set = isl_set_universe(isl_space_copy(graph->node[i].space));
-		dom = isl_union_set_union(dom, isl_union_set_from_set(set));
-	}
-
-	return dom;
-}
-
 /* Return a list of unions of universe domains, where each element
  * in the list corresponds to an SCC (or WCC) indexed by node->scc.
  */
