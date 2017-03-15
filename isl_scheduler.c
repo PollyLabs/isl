@@ -66,6 +66,91 @@
  * Parallelization and Locality Optimization in the Polyhedral Model".
  */
 
+static int ignore_conflict(int c, void *user)
+{
+	return 0;
+}
+
+/* Replace rows in a square matrix 'mat' starting from 'row' so that all rows
+ * in the matrix are orthogonal, i.e. the matrix defines an orthogonal basis.
+ * More specifically, pairwise scalar products of all row-vectors are 0.
+ * No guarantees on norm of the vectors are given.
+ *
+ * No verification that first 'row'-1 rows are orthogonal is performed.
+ *
+ * If 'row' is 0, return identity matrix, orthogonal by construction.
+ *
+ * For each row to complete, take all preceding rows (a1,b1,c1,...),
+ * (a2,b2,c2,...),... and define an ILP
+ * a1*(x^+ - x^-) + b1*(y^+ - y^-) + c1*(z^+ - z^-) + ... = 0
+ * a2*(x^+ - x^-) + b2*(y^+ - y^-) + c2*(z^+ - z^-) + ... = 0
+ * ...
+ * where x^- and x^+ are the positive and negative parts of the values of
+ * the new row.
+ * Find the solution to lexmin (x^-,x^+,y^-,y^+,z^-,z^+,...), non-trivial on
+ * the entire region of unknowns, that is having at least one non-zero value.
+ * Add this solution as a new row and repeat until all rows are completed.
+ */
+__isl_give isl_mat *orthogonal_complete(__isl_take isl_mat *mat, int row)
+{
+	int i, j;
+	isl_ctx *ctx = isl_mat_get_ctx(mat);
+	int n_col = isl_mat_cols(mat);
+	isl_basic_set *lp = NULL;
+
+	if (n_col != isl_mat_rows(mat))
+		isl_die(ctx, isl_error_internal, "can only complete square matrices",
+			return isl_mat_free(mat));
+
+	if (row == 0) {
+		for (i = 0; i < n_col; ++i) {
+			isl_seq_clr(mat->row[i], n_col);
+			isl_int_set_si(mat->row[i][i], 1);
+		}
+		return mat;
+	}
+
+	for ( ; row < n_col; ++row) {
+		isl_vec *new_row;
+		isl_mat *region_mat;
+
+		lp = isl_basic_set_alloc(ctx, 0, 2 * n_col, 0, row, 0);
+
+		for (i = 0; i < row; ++i) {
+			int k = isl_basic_set_alloc_equality(lp);
+			if (k < 0) {
+				isl_basic_set_free(lp);
+				return isl_mat_free(mat);
+			}
+			isl_seq_clr(lp->eq[k], 1 + 2 * n_col);
+			for (j = 0; j < n_col; ++j) {
+				isl_int_neg(lp->eq[k][1 + 2 * j], mat->row[i][j]);
+				isl_int_set(lp->eq[k][2 + 2 * j], mat->row[i][j]);
+			}
+		}
+
+		region_mat = isl_mat_identity(ctx, 2 * n_col);
+		struct isl_trivial_region full_region = { 0, region_mat };
+		new_row = isl_tab_basic_set_non_trivial_lexmin(lp, 0,
+			1, &full_region, &ignore_conflict, NULL);
+		isl_mat_free(region_mat);
+		if (!new_row)
+			return isl_mat_free(mat);
+		if (isl_vec_size(new_row) == 0) {
+			isl_vec_free(new_row);
+			return isl_mat_free(mat);
+		}
+
+		for (i = 0; i < n_col; ++i) {
+			isl_int_sub(mat->row[row][i],
+				new_row->el[2 + 2*i], new_row->el[1 + 2*i]);
+		}
+		isl_vec_free(new_row);
+	}
+
+	return mat;
+}
+
 /* Internal information about a node that is used during the construction
  * of a schedule.
  * space represents the original space in which the domain lives;
