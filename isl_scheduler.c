@@ -3592,6 +3592,50 @@ static isl_stat add_var_sum_constraint(struct isl_sched_graph *graph,
 	return isl_stat_ok;
 }
 
+
+/* Add a constraint to graph->lp that equates the value at position
+ * 'sum_pos' to the sum of the variable coefficients of all nodes
+ * in the original basis.
+ */
+static isl_stat add_var_sum_cmapped(struct isl_sched_graph *graph,
+	int sum_pos)
+{
+	int i, j, k;
+	int total;
+
+	total = isl_basic_set_dim(graph->lp, isl_dim_set);
+
+	k = isl_basic_set_alloc_equality(graph->lp);
+	if (k < 0)
+		return isl_stat_error;
+	isl_seq_clr(graph->lp->eq[k], 1 + total);
+	isl_int_set_si(graph->lp->eq[k][1 + sum_pos], -1);
+	for (i = 0; i < graph->n; ++i) {
+		struct isl_sched_node *node = &graph->node[i];
+		int pos = 1 + node_var_coef_offset(node);
+
+		int n_row = isl_mat_rows(node->cmap);
+		if (n_row == 0)
+			continue;
+		isl_vec *vec = isl_mat_get_row(node->cmap, 0);
+		for (j = 1; j < n_row; ++j)
+			vec = isl_vec_add(vec, isl_mat_get_row(node->cmap, j));
+
+		// TODO: what is the relation between node->nvar and n_row?
+		isl_assert(isl_basic_set_get_ctx(graph->lp), node->nvar == n_row,
+			return isl_stat_error);
+
+		for (j = 0; j < n_row; ++j) {
+			isl_int_set(graph->lp->eq[k][pos + 2*j], vec->el[j]);
+			isl_int_set(graph->lp->eq[k][pos + 2*j + 1], vec->el[j]);
+		}
+		isl_vec_free(vec);
+	}
+
+	return isl_stat_ok;
+
+}
+
 static inline __isl_give isl_basic_map *fix_out_dims_as_params(
 	__isl_take isl_basic_map *bmap)
 {
@@ -4121,7 +4165,7 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	if (parametric && add_param_sum_constraint(graph, param_pos - 2) < 0)
 		return isl_stat_error;
-	if (add_var_sum_constraint(graph, param_pos - 1) < 0)
+	if (add_var_sum_cmapped(graph, param_pos - 1) < 0)
 		return isl_stat_error;
 	if (add_bound_constant_constraints(ctx, graph) < 0)
 		return isl_stat_error;
