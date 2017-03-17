@@ -8226,10 +8226,8 @@ static isl_bool ok_to_merge_parallel(isl_ctx *ctx,
 
 	for (i = 0; i < graph->n_edge; ++i) {
 		edge = &graph->edge[i];
-		int use_edge = is_proximity(edge) || (is_spatial_proximity(edge) &&
-			isl_options_get_schedule_spatial_fusion(ctx));
 
-		if (!use_edge)
+		if (!is_coincidence(edge))
 			continue;
 		if (!c->scc_in_merge[edge->src->scc])
 			continue;
