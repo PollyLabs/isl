@@ -3592,6 +3592,16 @@ static isl_stat add_var_sum_constraint(struct isl_sched_graph *graph,
 	return isl_stat_ok;
 }
 
+/* Take absolute values of the elements of vector "vec".
+ */
+static __isl_give isl_vec *vec_abs(__isl_take isl_vec *vec)
+{
+	int i;
+
+	for (i = 0; i < vec->size; ++i)
+		isl_int_abs(vec->el[i], vec->el[i]);
+	return vec;
+}
 
 /* Add a constraint to graph->lp that equates the value at position
  * 'sum_pos' to the sum of the variable coefficients of all nodes
@@ -3617,9 +3627,9 @@ static isl_stat add_var_sum_cmapped(struct isl_sched_graph *graph,
 		int n_row = isl_mat_rows(node->cmap);
 		if (n_row == 0)
 			continue;
-		isl_vec *vec = isl_mat_get_row(node->cmap, 0);
+		isl_vec *vec = vec_abs(isl_mat_get_row(node->cmap, 0));
 		for (j = 1; j < n_row; ++j)
-			vec = isl_vec_add(vec, isl_mat_get_row(node->cmap, j));
+			vec = isl_vec_add(vec, vec_abs(isl_mat_get_row(node->cmap, j)));
 
 		// TODO: what is the relation between node->nvar and n_row?
 		isl_assert(isl_basic_set_get_ctx(graph->lp), node->nvar == n_row,
