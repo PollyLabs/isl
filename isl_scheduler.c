@@ -7018,6 +7018,72 @@ static __isl_give isl_schedule_node *compute_schedule_finish_band(
 	return node;
 }
 
+static __isl_give isl_map *remove_tuple_ids(__isl_take isl_map *map,
+	void *user)
+{
+	return isl_map_reset_tuple_id(map, isl_dim_in);
+}
+
+static __isl_give isl_map *count_basic_map_with_depth(__isl_take isl_map *map,
+	void *user)
+{
+	int *n = user;
+	*n += isl_map_n_basic_map(map) * isl_map_n_in(map);
+	return map;
+}
+
+static __isl_give isl_map *map_extend_in(__isl_take isl_map *map, void *user)
+{
+	int *n_reqired_in = user;
+	int n_in = isl_map_n_in(map);
+	if (*n_reqired_in < n_in)
+		return isl_map_free(map);
+	if (*n_reqired_in == n_in)
+		return map;
+	return isl_map_add_dims(map, isl_dim_in, *n_reqired_in - n_in);
+}
+
+static __isl_give isl_map *map_max_in(__isl_take isl_map *map, void *user)
+{
+	int *max_in = user;
+	int n_in = isl_map_n_in(map);
+	if (n_in > *max_in)
+		*max_in = n_in;
+	return map;
+}
+
+static __isl_give isl_union_map *union_map_align_in(
+	__isl_take isl_union_map *umap)
+{
+	int max_in = 0;
+	umap = union_map_transform(umap, &map_max_in, &max_in);
+	return union_map_transform(umap, &map_extend_in, &max_in);
+}
+
+__isl_give isl_map *isl_map_normalize(isl_map *);
+
+static __isl_give isl_map *map_normalize(__isl_take isl_map *map,
+	void *user)
+{
+	return isl_map_normalize(map);
+}
+
+// assuming counted accesses are filtered
+static int graph_n_different_access_functions(struct isl_sched_graph *graph)
+{
+	int n_basic_map = 0;
+
+	isl_union_map *accesses = isl_union_map_copy(graph->counted_accesses);
+	accesses = isl_union_map_domain_factor_domain(accesses);
+	accesses = union_map_transform(accesses, &remove_tuple_ids, NULL);
+	accesses = union_map_align_in(accesses);
+	accesses = union_map_transform(accesses, &map_normalize, NULL);
+	accesses = union_map_transform(accesses, &count_basic_map_with_depth,
+		&n_basic_map);
+	isl_union_map_free(accesses);
+	return n_basic_map;
+}
+
 /* Construct a band of schedule rows for a connected dependence graph.
  * The caller is responsible for determining the strongly connected
  * components and calling compute_maxvar first.
@@ -7073,6 +7139,12 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 
 	if (ctx->opt->schedule_outer_coincidence)
 		force_coincidence = 1;
+
+	if (!ctx->opt->schedule_force_outer_coincidence) {
+		int n_access_funcs = graph_n_different_access_functions(graph);
+		if (n_access_funcs < 27)
+			force_coincidence = 0;
+	}
 
 	avoid_inner = ctx->opt->schedule_avoid_inner_coincidence;
 

@@ -148,6 +148,10 @@ ISL_ARG_BOOL(struct isl_options, schedule_outer_coincidence, 0,
 	"schedule-outer-coincidence", 0,
 	"try to construct schedules where the outer member of each band "
 	"satisfies the coincidence constraints")
+ISL_ARG_BOOL(struct isl_options, schedule_force_outer_coincidence, 0,
+	"schedule-force-outer-coincidence", 1,
+	"if schedule-outer-coincidence is enabled, force band splitting "
+	"if the outer dimension does not satisfy dependence constraints")
 ISL_ARG_BOOL(struct isl_options, schedule_single_outer_coincidence, 0,
 	"schedule-single-outer-coincidence", 0,
 	"after finding one band member that satisfies coinciednce constraints "
@@ -317,6 +321,11 @@ ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_outer_coincidence)
 ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_outer_coincidence)
+
+ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_force_outer_coincidence)
+ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_force_outer_coincidence)
 
 ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_single_outer_coincidence)
