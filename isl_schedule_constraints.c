@@ -483,6 +483,21 @@ static __isl_give isl_union_map *apply(__isl_take isl_union_map *c,
 	return c;
 }
 
+/* Apply "umap" to the domain of the wrapped domain of "c".
+ * That is, for each map of the shape
+ *
+ * [A -> B] -> C
+ *
+ * in "c", apply "umap" to A.
+ */
+static __isl_give isl_union_map *apply_domain_factor_domain(
+        __isl_take isl_union_map *c, __isl_keep isl_union_map *umap)
+{
+        c = isl_union_map_curry(c);
+        c = isl_union_map_apply_domain(c, isl_union_map_copy(umap));
+        return isl_union_map_uncurry(c);
+}
+
 /* Apply "umap" to the domain of the schedule constraints "sc".
  *
  * The two sides of the various schedule constraints are adjusted
@@ -509,7 +524,8 @@ __isl_give isl_schedule_constraints *isl_schedule_constraints_apply(
 	if (!sc->counted_accesses)
 		goto error;
 
-	sc->domain = isl_union_set_apply(sc->domain, umap);
+	sc->counted_accesses = apply_domain_factor_domain(
+		sc->counted_accesses, umap);
 	if (!sc->domain)
 		return isl_schedule_constraints_free(sc);
 

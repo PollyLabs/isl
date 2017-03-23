@@ -3623,13 +3623,17 @@ static isl_stat add_var_sum_cmapped(struct isl_sched_graph *graph,
 	for (i = 0; i < graph->n; ++i) {
 		struct isl_sched_node *node = &graph->node[i];
 		int pos = 1 + node_var_coef_offset(node);
+		isl_mat *cmap = isl_mat_transpose(isl_mat_copy(node->vmap));
 
-		int n_row = isl_mat_rows(node->cmap);
-		if (n_row == 0)
+		int n_row = isl_mat_rows(cmap);
+		if (n_row == 0) {
+			isl_mat_free(cmap);
 			continue;
-		isl_vec *vec = vec_abs(isl_mat_get_row(node->cmap, 0));
+		}
+		isl_vec *vec = vec_abs(isl_mat_get_row(cmap, 0));
 		for (j = 1; j < n_row; ++j)
-			vec = isl_vec_add(vec, vec_abs(isl_mat_get_row(node->cmap, j)));
+			vec = isl_vec_add(vec, vec_abs(isl_mat_get_row(cmap, j)));
+		isl_mat_free(cmap);
 
 		// TODO: what is the relation between node->nvar and n_row?
 		isl_assert(isl_basic_set_get_ctx(graph->lp), node->nvar == n_row,
