@@ -333,7 +333,7 @@ __isl_give isl_schedule_band *isl_schedule_band_permute(
 
 	for (i = 0; i < band->n; ++i) {
 		int k = isl_basic_map_alloc_equality(reorder_map);
-		isl_seq_clr(reorder_map->eq[k], 2 * band->n + 1);
+		isl_seq_clr(reorder_map->eq[k], 2 * band->n + n_param + 1);
 
 		isl_int_set_si(reorder_map->eq[k][pos_in + i], 1);
 		isl_int_set_si(reorder_map->eq[k][pos_out + order[i]], -1);
