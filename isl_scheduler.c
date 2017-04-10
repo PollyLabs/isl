@@ -3672,6 +3672,9 @@ static inline __isl_give isl_basic_map *fix_out_dims_as_params(
 	return bmap;
 }
 
+// this is based on the conjecture that isl simplification
+// will prefer expressing a dimension as an equality to parameter
+// rather than to other dimension.
 static int access_rank_hull(__isl_take isl_basic_map *bmap,
 	__isl_take isl_basic_map *partial_schedule)
 {
@@ -3692,60 +3695,8 @@ static int access_rank_hull(__isl_take isl_basic_map *bmap,
 	bmap = isl_basic_map_drop_constraints_not_involving_dims(bmap,
 		isl_dim_out, 0, n_out);
 	rank = bmap->n_eq;
-	isl_basic_map_debug(bmap);
 	isl_basic_map_free(bmap);
 	return rank;
-}
-
-static int access_rank(__isl_take isl_basic_map *bmap,
-	__isl_take isl_basic_map *partial_schedule)
-{
-	// XXX: this is based on the conjecture that isl simplification
-	// will prefer expressing a dimension as an equality to parameter
-	// rather than to other dimension.
-
-	isl_basic_map *scheduled;
-	int n_out, n_in, i, j, used;
-	int *used_dims;
-	isl_constraint *constraint;
-	isl_val *val;
-
-	partial_schedule = fix_out_dims_as_params(partial_schedule);
-	scheduled = isl_basic_map_apply_domain(isl_basic_map_copy(bmap),
-		partial_schedule);
-	bmap = isl_basic_map_domain_product(bmap, scheduled);
-
-	if (isl_basic_map_is_empty(bmap))
-	{
-		isl_basic_map_free(bmap);
-		return 0;
-	}
-
-	n_in = isl_basic_map_n_in(bmap);
-	n_out = isl_basic_map_n_out(bmap);
-	used_dims = (int *) calloc(n_in, sizeof(int));
-	for (i = 0; i < n_out; i++)
-	{
-		if (!isl_basic_map_has_defining_equality(bmap, isl_dim_out, i,
-				&constraint))  // FIXME: why this could happen??
-			continue;
-		for (j = 0; j < n_in; j++)
-		{
-			val = isl_constraint_get_coefficient_val(constraint,
-				isl_dim_in, j);
-			if (isl_val_is_zero(val) == isl_bool_false)
-				used_dims[j] = 1;
-			isl_val_free(val);
-		}
-		isl_constraint_free(constraint);
-	}
-	used = 0;
-	for (i = 0; i < n_in; i++)
-		used += used_dims[i];
-	free(used_dims);
-	isl_basic_map_free(bmap);
-
-	return used;
 }
 
 static inline int access_multiplicity(__isl_take isl_basic_map *access)
@@ -3763,70 +3714,6 @@ static inline int access_multiplicity(__isl_take isl_basic_map *access)
 
 	isl_basic_map_free(access);
 	return multiplicity;
-}
-
-static isl_stat map_maximum_rank(__isl_keep isl_map *map,
-	__isl_keep isl_map *partial_schedule, struct isl_sched_graph *graph)
-{
-	int i, j, rank, n_scheduled, multiplicity;
-	int maxrank, prev_maxrank;
-	int maxrank_multiplicity = 0;
-	int total_multiplicity = 0;
-	struct id_rank_table_entry *id_entry;
-	isl_id *array_id;
-	isl_map *counted_accesses;
-
-	array_id = isl_map_get_tuple_id(map, isl_dim_out);
-	id_entry = id_rank_table_find(graph->id_rank_table, array_id, 0);
-	if (!id_entry)
-	{
-		if (id_list_index_of(graph->id_list, array_id) == -1)
-			return isl_stat_ok;  // FIXME: if it is not in id_table AND it is not in id_list, so we don't care about it (id_list contains only the ids present in spatial proximity)
-								 // better solution is: keep only those relations in counted_accesses, that are connected to id_list
-		return isl_stat_error;
-	}
-	maxrank = id_entry->rank;
-	maxrank_multiplicity = id_entry->multiplicity;
-	total_multiplicity = id_entry->total_multiplicity;
-
-	map = isl_map_copy(map);
-	counted_accesses = isl_map_copy(map);
-	map = isl_map_domain_factor_domain(map);
-	n_scheduled = isl_map_n_out(partial_schedule);
-	map = isl_map_add_dims(map, isl_dim_param, n_scheduled);
-	for (i = 0; i < map->n; ++i)
-	{
-		multiplicity = access_multiplicity(
-			isl_basic_map_copy(counted_accesses->p[i]));
-		if (multiplicity < 0)
-			goto error;
-		prev_maxrank = maxrank;
-		for (j = 0; j < partial_schedule->n; ++j)
-		{
-			rank = access_rank(isl_basic_map_copy(map->p[i]),
-				isl_basic_map_copy(partial_schedule->p[j]));
-			if (rank > maxrank)
-				maxrank = rank;
-		}
-		if (prev_maxrank == maxrank)
-			maxrank_multiplicity += multiplicity;
-		else if (maxrank > prev_maxrank)
-			maxrank_multiplicity = multiplicity;
-		total_multiplicity += multiplicity;
-	}
-
-	id_entry->rank = maxrank;
-	id_entry->multiplicity = maxrank_multiplicity;
-	id_entry->total_multiplicity = total_multiplicity;
-
-	isl_map_free(map);
-	isl_map_free(counted_accesses);
-	return isl_stat_ok;
-
-error:
-	isl_map_free(map);
-	isl_map_free(counted_accesses);
-	return isl_stat_error;
 }
 
 struct union_map_transform_data
@@ -3977,7 +3864,7 @@ static isl_stat map_maximum_ref_rank(__isl_keep isl_map *map,
 	{
 		for (j = 0; j < partial_schedule->n; ++j)
 		{
-			rank = access_rank(isl_basic_map_copy(map->p[i]),
+			rank = access_rank_hull(isl_basic_map_copy(map->p[i]),
 				isl_basic_map_copy(partial_schedule->p[j]));
 			if (rank > maxrank)
 				maxrank = rank;
