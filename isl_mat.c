@@ -1685,6 +1685,52 @@ error:
 	return NULL;
 }
 
+/* Complete an MxN matrix (M < N) "mat" with rows, linearly independent from
+ * those of "mat", so that it has "upto" ("upto" <= N).  Existing rows are not
+ * affected even if they are not linearly independent.
+ *
+ * In particular, compute a Hermite decomposition
+ *
+ * HQ = mat,
+ *
+ * where Q is sqaure unimodular matrix and H is lower triangular. Complete H
+ * with rows having 1 as diagonal elements, guaranteed to be linearly indepnent
+ * in case of lower triangularity. Then update the original matrix as
+ *
+ * mat' = H'Q.
+ */
+__isl_give isl_mat *isl_mat_linear_independent_complete(__isl_take isl_mat *mat,
+	int upto)
+{
+	isl_mat *sub, *Q;
+	int n_row, i;
+	isl_ctx *ctx;
+
+	if (!mat)
+		return NULL;
+
+	ctx = isl_mat_get_ctx(mat);
+
+	n_row = isl_mat_rows(mat);
+	if (n_row >= upto)
+		return mat;
+
+	if (isl_mat_cols(mat) < upto)
+		return isl_mat_free(mat);
+
+	sub = isl_mat_sub_alloc(mat, 0, n_row, 0, upto);
+	sub = isl_mat_left_hermite(sub, 0, NULL, &Q);
+	sub = isl_mat_add_zero_rows(sub, upto - n_row);
+	for (i = n_row; i < upto; ++i)
+		isl_int_set_si(sub->row[i][i], 1);
+	sub = isl_mat_product(sub, Q);
+	mat = isl_mat_add_zero_rows(mat, upto - n_row);
+	isl_mat_sub_copy(ctx, mat->row, sub->row, upto, 0, 0, upto);
+	isl_mat_free(sub);
+
+	return mat;
+}
+
 __isl_give isl_mat *isl_mat_concat(__isl_take isl_mat *top,
 	__isl_take isl_mat *bot)
 {
