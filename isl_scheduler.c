@@ -2673,17 +2673,13 @@ static __isl_give isl_vec *extract_var_coef(struct isl_sched_node *node,
  * The new row is added to the current band.
  * All possibly negative coefficients are encoded as a difference
  * of two non-negative variables, so we need to perform the subtraction
- * here.  Moreover, if use_cmap is set, then the solution does
- * not refer to the actual coefficients c_i_x, but instead to variables
- * t_i_x such that c_i_x = Q t_i_x and Q is equal to node->cmap.
- * In this case, we then also need to perform this multiplication
- * to obtain the values of c_i_x.
+ * here.
  *
  * If coincident is set, then the caller guarantees that the new
  * row satisfies the coincidence constraints.
  */
 static int update_schedule(struct isl_sched_graph *graph,
-	__isl_take isl_vec *sol, int use_cmap, int coincident)
+	__isl_take isl_vec *sol, int coincident)
 {
 	int i, j;
 	isl_vec *csol = NULL;
@@ -2715,11 +2711,6 @@ static int update_schedule(struct isl_sched_graph *graph,
 		for (j = 0; j < 1 + node->nparam; ++j)
 			node->sched = isl_mat_set_element(node->sched,
 						row, j, sol->el[1 + pos + j]);
-		if (use_cmap)
-			csol = isl_mat_vec_product(isl_mat_copy(node->cmap),
-						   csol);
-		if (!csol)
-			goto error;
 		for (j = 0; j < node->nvar; ++j)
 			node->sched = isl_mat_set_element(node->sched,
 					row, 1 + node->nparam + j, csol->el[j]);
@@ -4582,7 +4573,7 @@ static __isl_give isl_schedule_node *carry(__isl_take isl_schedule_node *node,
 		return compute_component_schedule(node, graph, 1);
 	}
 
-	if (update_schedule(graph, sol, 0, 0) < 0)
+	if (update_schedule(graph, sol, 0) < 0)
 		return isl_schedule_node_free(node);
 	if (trivial)
 		graph->n_row--;
@@ -5069,7 +5060,7 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 			return isl_stat_ok;
 		}
 		coincident = !has_coincidence || use_coincidence;
-		if (update_schedule(graph, sol, 0, coincident) < 0)
+		if (update_schedule(graph, sol, coincident) < 0)
 			return isl_stat_error;
 
 		if (!check_conditional)
