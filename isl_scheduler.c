@@ -4066,7 +4066,7 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	if (parametric && add_param_sum_constraint(graph, param_pos - 2) < 0)
 		return isl_stat_error;
-	if (add_var_sum_cmapped(graph, param_pos - 1) < 0)
+	if (add_var_sum_constraint(graph, param_pos - 1) < 0)
 		return isl_stat_error;
 	if (add_bound_constant_constraints(ctx, graph) < 0)
 		return isl_stat_error;
