@@ -8126,7 +8126,7 @@ static isl_bool ok_to_merge_proximity(isl_ctx *ctx,
 
 /* Independence test: first dimension where distance is zero.
  */
-static int outer_paralel_dim(__isl_take isl_map *dependence)
+static int outer_paralel_dim(__isl_take isl_map *dependence, int start)
 {
 	int i, n_dim;
 	isl_map *test;
@@ -8134,11 +8134,11 @@ static int outer_paralel_dim(__isl_take isl_map *dependence)
 
 	if (isl_map_is_empty(dependence)) {
 		isl_map_free(dependence);
-		return 0;
+		return start;
 	}
 
 	n_dim = isl_min(isl_map_n_in(dependence), isl_map_n_out(dependence));
-	for (i = 0; i < n_dim; ++i) {
+	for (i = start; i < n_dim; ++i) {
 		test = isl_map_universe(isl_map_get_space(dependence));
 		test = isl_map_equate(test, isl_dim_out, i, isl_dim_in, i);
 		r = isl_map_is_subset(dependence, test);
@@ -8157,10 +8157,10 @@ static int outer_paralel_dim(__isl_take isl_map *dependence)
 /* Get first parallel dimension given all validity dependences in the graph.
  * Return -1 in case of error.
  */
-static int scc_outer_parallel_dim(struct isl_sched_graph *graph)
+static int scc_outer_parallel_dim(struct isl_sched_graph *graph, int start)
 {
 	int i;
-	int outermost_parallel = 0, outer_parallel;
+	int outermost_parallel = start, outer_parallel;
 	struct isl_sched_edge *edge;
 	isl_map *dep, *src_schedule, *dst_schedule;
 
@@ -8173,7 +8173,7 @@ static int scc_outer_parallel_dim(struct isl_sched_graph *graph)
 		dep = isl_map_copy(edge->map);
 		dep = isl_map_apply_domain(dep, src_schedule);
 		dep = isl_map_apply_range(dep, dst_schedule);
-		outer_parallel = outer_paralel_dim(dep);
+		outer_parallel = outer_paralel_dim(dep, start);
 		if (outer_parallel < 0)
 			return outer_parallel;
 		if (outer_parallel > outermost_parallel)
@@ -8216,8 +8216,8 @@ static isl_bool ok_to_merge_parallel(isl_ctx *ctx,
 		src_scc = &c->scc[edge->src->scc];
 		dst_scc = &c->scc[edge->dst->scc];
 
-		src_outermost_parallel = scc_outer_parallel_dim(src_scc);
-		dst_outermost_parallel = scc_outer_parallel_dim(dst_scc);
+		src_outermost_parallel = scc_outer_parallel_dim(src_scc, src_scc->band_start);
+		dst_outermost_parallel = scc_outer_parallel_dim(dst_scc, dst_scc->band_start);
 		if (src_outermost_parallel < 0 || dst_outermost_parallel < 0)
 			return isl_bool_error;
 
@@ -8237,7 +8237,7 @@ static isl_bool ok_to_merge_parallel(isl_ctx *ctx,
 		dep = isl_map_apply_domain(dep, src_schedule);
 		dep = isl_map_apply_range(dep, dst_schedule);
 
-		outer_parallel = outer_paralel_dim(dep);
+		outer_parallel = outer_paralel_dim(dep, src_scc->band_start); // FIXME: not sure band_start here is applicable
 		if (outer_parallel == -1)
 			return isl_bool_error;
 		if ((outer_parallel != src_scc->band_start) ||
