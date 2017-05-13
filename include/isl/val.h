@@ -58,7 +58,7 @@ __isl_give isl_val *isl_val_set_si(__isl_take isl_val *v, long i);
 
 __isl_export
 __isl_give isl_val *isl_val_abs(__isl_take isl_val *v);
-__isl_export
+__isl_operator
 __isl_give isl_val *isl_val_neg(__isl_take isl_val *v);
 __isl_export
 __isl_give isl_val *isl_val_inv(__isl_take isl_val *v);
@@ -73,16 +73,16 @@ __isl_export
 __isl_give isl_val *isl_val_min(__isl_take isl_val *v1, __isl_take isl_val *v2);
 __isl_export
 __isl_give isl_val *isl_val_max(__isl_take isl_val *v1, __isl_take isl_val *v2);
-__isl_export
+__isl_operator
 __isl_give isl_val *isl_val_add(__isl_take isl_val *v1, __isl_take isl_val *v2);
 __isl_give isl_val *isl_val_add_ui(__isl_take isl_val *v1, unsigned long v2);
-__isl_export
+__isl_operator
 __isl_give isl_val *isl_val_sub(__isl_take isl_val *v1, __isl_take isl_val *v2);
 __isl_give isl_val *isl_val_sub_ui(__isl_take isl_val *v1, unsigned long v2);
-__isl_export
+__isl_operator
 __isl_give isl_val *isl_val_mul(__isl_take isl_val *v1, __isl_take isl_val *v2);
 __isl_give isl_val *isl_val_mul_ui(__isl_take isl_val *v1, unsigned long v2);
-__isl_export
+__isl_operator
 __isl_give isl_val *isl_val_div(__isl_take isl_val *v1, __isl_take isl_val *v2);
 __isl_give isl_val *isl_val_div_ui(__isl_take isl_val *v1, unsigned long v2);
 __isl_export
@@ -122,17 +122,17 @@ isl_bool isl_val_is_neginfty(__isl_keep isl_val *v);
 __isl_export
 int isl_val_cmp_si(__isl_keep isl_val *v, long i);
 
-__isl_export
+__isl_operator
 isl_bool isl_val_lt(__isl_keep isl_val *v1, __isl_keep isl_val *v2);
-__isl_export
+__isl_operator
 isl_bool isl_val_le(__isl_keep isl_val *v1, __isl_keep isl_val *v2);
-__isl_export
+__isl_operator
 isl_bool isl_val_gt(__isl_keep isl_val *v1, __isl_keep isl_val *v2);
-__isl_export
+__isl_operator
 isl_bool isl_val_ge(__isl_keep isl_val *v1, __isl_keep isl_val *v2);
-__isl_export
+__isl_operator
 isl_bool isl_val_eq(__isl_keep isl_val *v1, __isl_keep isl_val *v2);
-__isl_export
+__isl_operator
 isl_bool isl_val_ne(__isl_keep isl_val *v1, __isl_keep isl_val *v2);
 __isl_export
 isl_bool isl_val_abs_eq(__isl_keep isl_val *v1, __isl_keep isl_val *v2);

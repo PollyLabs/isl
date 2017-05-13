@@ -307,6 +307,49 @@ void test_foreach(isl::ctx ctx)
 	assert(ret2 == isl::stat::error);
 }
 
+/* Test C++ operators for isl_val
+ *
+ * This includes:
+ *
+ * # Arithmetic
+ *  - negation
+ *  - addition / subtraction
+ *  - multiplication / division
+ *
+ * # Comparison
+ *  - Inequality
+ *  - Equality
+ */
+void test_operators_val(isl::ctx ctx)
+{
+	isl::val half(ctx, "1/2");
+	isl::val one(ctx, "1");
+	isl::val neg_one(ctx, "-1");
+	isl::val two(ctx, "2");
+	isl::val four(ctx, "4");
+
+	assert(-one == neg_one);
+	assert(one + one == two);
+	assert(two - one == one);
+	assert(two * two == four);
+	assert(one / two == half);
+	assert(one < two);
+	assert(one <= two);
+	assert(two > one);
+	assert(two >= one);
+	assert(one == one);
+	assert(one != two);
+}
+
+/* Test C++ operators for:
+ *
+ * - isl_val
+ */
+void test_operators(isl::ctx ctx)
+{
+	test_operators_val(ctx);
+}
+
 /* Test the isl C++ interface
  *
  * This includes:
@@ -315,6 +358,7 @@ void test_foreach(isl::ctx ctx)
  *  - Different parameter types
  *  - Different return types
  *  - Foreach functions
+ *  - C++ operators
  */
 int main()
 {
@@ -325,6 +369,7 @@ int main()
 	test_parameters(ctx);
 	test_return(ctx);
 	test_foreach(ctx);
+	test_operators(ctx);
 
 	isl_ctx_free(ctx);
 }

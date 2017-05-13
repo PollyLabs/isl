@@ -553,12 +553,41 @@ void cpp_generator::print_methods_impl(ostream &os, const isl_class &clazz)
 	}
 }
 
+/* Map isl function names to C++ operators.
+ */
+static const char *op_map[][2] = {
+       { "neg", "-" },
+       { "add", "+" },
+       { "sub", "-" },
+       { "mul", "*" },
+       { "div", "/" },
+       { "lt", "<" },
+       { "le", "<=" },
+       { "gt", ">" },
+       { "ge", ">=" },
+       { "eq", "==" },
+       { "ne", "!=" },
+};
+
+/* Translate a function name "name" into the corresponding C++ operator.
+ */
+std::string cpp_generator::get_op_name(std::string name) {
+	for (size_t i = 0; i < sizeof(op_map) / sizeof(op_map[0]); i++)
+		if (name.compare(op_map[i][0]) == 0)
+			return op_map[i][1];
+
+       die("No operator name found");
+};
+
 /* Print definitions for methods "methods" of name "fullname" in class "clazz"
  * to "os".
  *
  * "fullname" is the name of the generated C++ method.  It commonly corresponds
  * to the isl name, with the object type prefix dropped.
  * In case of overloaded methods, the result type suffix has also been removed.
+ *
+ * In case the function is marked as operator function, an additional variant
+ * as C++ operator is printed.
  *
  * "kind" specifies the kind of method that should be generated.
  */
@@ -576,6 +605,13 @@ void cpp_generator::print_method_group_impl(ostream &os, const isl_class &clazz,
 			osprintf(os, "\n");
 		kind = get_method_kind(clazz, *it);
 		print_method_impl(os, clazz, fullname, *it, kind);
+
+		if (is_operator(*it)) {
+			osprintf(os, "\n");
+			print_method_impl(os, clazz, fullname, *it,
+					  function_kind_operator);
+		}
+
 	}
 }
 
@@ -658,6 +694,9 @@ void cpp_generator::print_method_param_use(ostream &os, ParmVarDecl *param,
  * do not return a value, but instead update the pointer stored inside the
  * newly created object.
  *
+ * When printing a method as C++ operator, the function name is replaced by
+ * the corresponding C++ operator as defined by "get_op_name".
+ *
  * If the method has a callback argument, we reduce the number of parameters
  * that are exposed by one to hide the user pointer from the interface. On
  * the C++ side no user pointer is needed, as arguments can be forwarded
@@ -672,6 +711,9 @@ void cpp_generator::print_method_impl(ostream &os, const isl_class &clazz,
 	QualType return_type = method->getReturnType();
 	string rettype_str = type2cpp(return_type);
 	bool has_callback = false;
+
+	if (kind == function_kind_operator)
+		cname = get_op_name(cname);
 
 	print_method_header(os, clazz, method, fullname, false, kind);
 
@@ -754,6 +796,9 @@ void cpp_generator::print_method_impl(ostream &os, const isl_class &clazz,
  * as const reference, which allows the compiler to optimize the parameter
  * transfer.
  *
+ * When printing a method as C++ operator, the function name is replaced by
+ * the corresponding C++ operator as defined by "get_op_name".
+ *
  * Constructors are marked as explicit using the C++ keyword 'explicit' or as
  * implicit using a comment in place of the explicit keyword. By annotating
  * implicit constructors with a comment, users of the interface are made
@@ -770,6 +815,9 @@ void cpp_generator::print_method_header(ostream &os, const isl_class &clazz,
 	string classname = type2cpp(clazz);
 	int num_params = method->getNumParams();
 	int first_param = 0;
+
+	if (kind == function_kind_operator)
+		cname = "operator" + get_op_name(cname);
 
 	cname = rename_method(cname);
 	if (kind == function_kind_member_method)
@@ -794,7 +842,7 @@ void cpp_generator::print_method_header(ostream &os, const isl_class &clazz,
 	if (kind != function_kind_constructor)
 		osprintf(os, "%s ", rettype_str.c_str());
 
-	if (!is_declaration)
+	if (!is_declaration && kind != function_kind_operator)
 		osprintf(os, "%s::", classname.c_str());
 
 	if (kind != function_kind_constructor)

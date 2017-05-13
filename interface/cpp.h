@@ -14,6 +14,7 @@ public:
 		function_kind_static_method,
 		function_kind_member_method,
 		function_kind_constructor,
+		function_kind_operator,
 	};
 
 	virtual void generate();
@@ -71,4 +72,5 @@ private:
 	bool is_subclass(QualType subclass_type, const isl_class &class_type);
 	function_kind get_method_kind(const isl_class &clazz,
 		FunctionDecl *method);
+	std::string get_op_name(std::string name);
 };

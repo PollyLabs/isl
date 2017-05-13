@@ -33,6 +33,9 @@
 #ifndef __isl_overload
 #define __isl_overload
 #endif
+#ifndef __isl_operator
+#define __isl_operator
+#endif
 #ifndef __isl_constructor
 #define __isl_constructor
 #endif
