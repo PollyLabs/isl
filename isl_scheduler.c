@@ -7071,6 +7071,7 @@ static isl_bool remove_carried_spatial_proximity_edges(
 			graph_empty_and_remove_spatial_edge(graph, edge);
 			debug_removed_edge = 1;
 		}
+		isl_map_free(arr_tagged);
 	}
 
 	if (!debug_removed_edge) {
