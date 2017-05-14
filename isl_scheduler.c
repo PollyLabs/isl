@@ -7129,6 +7129,7 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 	int check_conditional;
 	int continue_coincidence = 1;
 	int avoid_inner;
+	int has_spatial_proximity = has_any_spatial_proximity(graph);
 
 	if (sort_sccs(graph) < 0)
 		return isl_stat_error;
@@ -7169,7 +7170,8 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 				return isl_stat_error;
 			if (sol->size == 0)
 				break;
-
+			if (!has_spatial_proximity)
+				break;
 			if (graph->n_row == graph->maxvar - 1)
 				break;
 
