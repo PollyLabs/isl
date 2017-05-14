@@ -7006,6 +7006,22 @@ static int graph_n_different_access_functions(struct isl_sched_graph *graph)
 	return n_basic_map;
 }
 
+static void graph_empty_and_remove_spatial_edge(struct isl_sched_graph *graph,
+						struct isl_sched_edge *edge)
+{
+	isl_union_map *umap;
+
+	isl_map *map = isl_map_empty(isl_map_get_space(edge->map));
+	isl_map_free(edge->map);
+	edge->map = map;
+
+	umap = isl_union_map_empty(
+			isl_union_map_get_space(edge->array_tagged_map));
+	isl_union_map_free(edge->array_tagged_map);
+	edge->array_tagged_map = umap;
+
+	graph_remove_edge(graph, edge);
+}
 
 /*
  * Returns true of at least one dependence was removed, false otherwise.
@@ -7043,14 +7059,7 @@ static isl_bool remove_carried_spatial_proximity_edges(
 		if (r < 0)
 			return r;
 		if (r) {
-			isl_map *map = isl_map_empty(isl_map_get_space(edge->map));
-			isl_map_free(edge->map);
-			edge->map = map;
-			isl_union_map *umap = isl_union_map_empty(
-				isl_union_map_get_space(edge->array_tagged_map));
-			isl_union_map_free(edge->array_tagged_map);
-			edge->array_tagged_map = umap;
-			graph_remove_edge(graph, edge);
+			graph_empty_and_remove_spatial_edge(graph, edge);
 			debug_removed_edge = 1;
 			continue;
 		}
@@ -7059,14 +7068,7 @@ static isl_bool remove_carried_spatial_proximity_edges(
 		if (r < 0)
 			return r;
 		if (r) {
-			isl_map *map = isl_map_empty(isl_map_get_space(edge->map));
-			isl_map_free(edge->map);
-			edge->map = map;
-			isl_union_map *umap = isl_union_map_empty(
-				isl_union_map_get_space(edge->array_tagged_map));
-			isl_union_map_free(edge->array_tagged_map);
-			edge->array_tagged_map = umap;
-			graph_remove_edge(graph, edge);
+			graph_empty_and_remove_spatial_edge(graph, edge);
 			debug_removed_edge = 1;
 		}
 	}
