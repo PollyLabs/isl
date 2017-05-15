@@ -6967,12 +6967,12 @@ static int graph_n_different_access_functions(struct isl_sched_graph *graph)
 	isl_union_map *accesses = isl_union_map_copy(graph->counted_accesses);
 	accesses = isl_union_map_domain_factor_domain(accesses);
 	accesses = union_map_transform(accesses, &remove_tuple_ids, NULL);
-	accesses = union_map_align_in(accesses);
+	//accesses = union_map_align_in(accesses);
 	accesses = union_map_transform(accesses, &map_normalize, NULL);
 	accesses = union_map_transform(accesses, &count_basic_map_with_depth,
 		&n_basic_map);
 	isl_union_map_free(accesses);
-	n_basic_map /= graph->n;
+//	n_basic_map /= graph->n;
 	return n_basic_map;
 }
 
@@ -7034,7 +7034,7 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 
 	if (!ctx->opt->schedule_force_outer_coincidence) {
 		int n_access_funcs = graph_n_different_access_functions(graph);
-		if (n_access_funcs < 6)
+		if (n_access_funcs < 30)
 			force_coincidence = 0;
 	}
 
