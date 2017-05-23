@@ -757,6 +757,9 @@ struct isl_sched_graph {
 	isl_id_to_id *ref_to_array;
 	struct isl_hash_table *array_to_ref;
 	int array_to_ref_borrowed;
+	isl_id_to_id *ref_to_group;
+	isl_map_to_basic_set *pattern_to_group_set; // FIXME: this should be map_to_id, but we don't have it yet;  a general-purpose hash map is tricky to use
+	int n_groups;
 };
 
 static __isl_give isl_id_list *graph_refs_to_same_array(isl_ctx *ctx,
@@ -1062,6 +1065,9 @@ static int graph_alloc(isl_ctx *ctx, struct isl_sched_graph *graph,
 	graph->ref_to_array = isl_id_to_id_alloc(ctx, 1);
 	graph->array_to_ref = isl_hash_table_alloc(ctx, 1);
 
+	graph->ref_to_group = isl_id_to_id_alloc(ctx, 1);
+	graph->pattern_to_group_set = isl_map_to_basic_set_alloc(ctx, 1);
+
 	if (!graph->node || !graph->region || (graph->n_edge && !graph->edge) ||
 	    !graph->sorted)
 		return -1;
@@ -1124,6 +1130,9 @@ static void graph_free(isl_ctx *ctx, struct isl_sched_graph *graph)
 
 	if (graph->id_rank_table)
 		id_rank_table_free(ctx, graph->id_rank_table);
+
+	isl_id_to_id_free(graph->ref_to_group);
+	isl_map_to_basic_set_free(graph->pattern_to_group_set);
 }
 
 /* For each "set" on which this function is called, increment
@@ -1873,6 +1882,92 @@ static isl_stat init_id_list(struct isl_sched_graph *graph,
 	return isl_stat_ok;
 }
 
+static __isl_give isl_basic_map *basic_map_drop_constants_in_eqs(
+		__isl_take isl_basic_map *bmap)
+{
+	int i;
+
+	for (i = 0; i < bmap->n_eq; ++i)
+		isl_int_set_si(bmap->eq[i][0], 0);
+	return bmap;
+}
+
+// accepts one counted access map and the graph
+// constructs a map ref_id -> group_id based on similarity of access patterns
+// in particular, in a group, last dimensions must be identical except constants
+// ignore scalar accesses
+static isl_stat ref_to_group_add(__isl_take isl_map *map, void *user)
+{
+	isl_id *ref_id, *group_id;
+	isl_bool r;
+	struct isl_sched_graph *graph = user;
+	isl_space *space = isl_map_get_space(map);
+	int n_out = isl_space_dim(space, isl_dim_out);
+	isl_ctx *ctx = isl_map_get_ctx(map);
+	isl_basic_set *group_id_wrapper;
+	isl_basic_map *bmap;
+
+	if (isl_map_dim(map, isl_dim_out) == 0) {
+		isl_map_free(map);
+		return isl_stat_ok;
+	}
+
+	map = isl_map_domain_factor_domain(map);
+	bmap = isl_map_affine_hull(map);
+	bmap = isl_basic_map_drop_constraints_not_involving_dims(bmap,
+						isl_dim_out, n_out - 1, 1);
+	bmap = isl_basic_map_project_out(bmap, isl_dim_out, 0, n_out - 1);
+	bmap = isl_basic_map_reset(bmap, isl_dim_in);
+	bmap = basic_map_drop_constants_in_eqs(bmap);
+	map = isl_map_from_basic_map(bmap);
+
+	if (!map || isl_map_is_empty(map)) {
+		isl_map_free(map);
+		isl_die(ctx, isl_error_internal,
+			"Could not extract the last access function",
+			return isl_stat_error);
+	}
+
+	space = isl_space_domain_factor_range(space);
+	ref_id = isl_space_get_tuple_id(space, isl_dim_in);
+	isl_space_free(space);
+
+	r = isl_map_to_basic_set_has(graph->pattern_to_group_set, map);
+	if (r < 0)
+		return isl_stat_error;
+	if (r) {
+		group_id_wrapper = isl_map_to_basic_set_get(
+					graph->pattern_to_group_set, map);
+		space = isl_basic_set_get_space(group_id_wrapper);
+		isl_basic_set_free(group_id_wrapper);
+		group_id = isl_space_get_tuple_id(space, isl_dim_set);
+		isl_space_free(space);
+	} else {
+		char name[20];
+
+		snprintf(name, 20, "__ppcg_group%d", graph->n_groups++);
+		group_id = isl_id_alloc(ctx, name, NULL);
+		space = isl_space_set_alloc(ctx, 0, 0);
+		space = isl_space_set_tuple_id(space, isl_dim_set,
+					       isl_id_copy(group_id));
+		group_id_wrapper = isl_basic_set_universe(space);
+		graph->pattern_to_group_set = isl_map_to_basic_set_set(
+			graph->pattern_to_group_set, map, group_id_wrapper);
+	}
+
+	graph->ref_to_group = isl_id_to_id_set(graph->ref_to_group, ref_id,
+					       group_id);
+	return isl_stat_ok;
+}
+
+static isl_stat init_ref_to_group(struct isl_sched_graph *graph) {
+	if (!graph->counted_accesses)
+		return isl_stat_ok;
+
+	return isl_union_map_foreach_map(graph->counted_accesses,
+					 &ref_to_group_add, graph);
+}
+
 
 /* Copy counted accesses only for those nodes which are present in the
  * subgraph.  The list of nodes must be already set up.
@@ -2006,6 +2101,9 @@ static isl_stat graph_init(struct isl_sched_graph *graph,
 
 	init_ref_to_array(graph);
 	graph->array_to_ref_borrowed = 0;
+
+	graph->n_groups = 0;
+	r = init_ref_to_group(graph);
 
 	return r;
 }
@@ -9113,7 +9211,7 @@ __isl_give isl_schedule *isl_schedule_constraints_compute_schedule(
 		domain = isl_union_set_free(domain);
 
 	node = isl_schedule_node_from_domain(domain);
-	node = isl_schedule_node_child(node, 0);
+	node = isl_schedule_node_child(node, 0);\
 	if (graph.n > 0)
 		node = compute_schedule(node, &graph);
 	sched = isl_schedule_node_get_schedule(node);
