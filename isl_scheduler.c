@@ -4476,6 +4476,7 @@ static isl_stat require_fixed_bounds(struct isl_sched_graph *graph,
 		int k = isl_basic_set_alloc_inequality(graph->lp);
 		if (k < 0)
 			return isl_stat_error;
+		isl_seq_clr(graph->lp->ineq[k], 1 + total);
 		isl_int_set_si(graph->lp->ineq[k][start + i], -1);
 		isl_int_set(graph->lp->ineq[k][0], fix_bounds->el[start + i]);
 	}
