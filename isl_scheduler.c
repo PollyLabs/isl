@@ -7630,15 +7630,17 @@ static isl_bool remove_first_carrying_spatial_proximity_edges(
 		id = isl_id_list_get_id(ref_ids, j);
 		for (i = graph->n_edge - 1; i >= 0; --i) {
 			struct isl_sched_edge *edge = &graph->edge[i];
-			arr_tagged = isl_map_free(arr_tagged);
 			if (!is_spatial_proximity(edge))
 				continue;
 
 			if (isl_union_map_is_empty(edge->array_tagged_map))
 				continue;
 
+			arr_tagged = isl_map_free(arr_tagged);
 			arr_tagged = isl_map_from_union_map(
 				isl_union_map_copy(edge->array_tagged_map));
+			if (isl_map_is_empty(arr_tagged))
+				continue;
 			r = map_has_tag(arr_tagged, id, isl_dim_in);
 			if (r < 0)
 				goto cleanup;
