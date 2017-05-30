@@ -4325,12 +4325,11 @@ static __isl_give struct group_size_table *group_size_table_for_graph(
 }
 
 static int compare_groups_by_size(__isl_keep isl_id *id1,
-				  __isl_keep isl_id *id2, void *user)
+	__isl_keep isl_id *id2, struct group_size_table *table, int desc)
 {
 	int i;
 	int size1 = 0;
 	int size2 = 0;
-	struct group_size_table *table = user;
 
 	for (i = 0; i < table->n; ++i) {
 		if (table->el[i].id == id1)
@@ -4338,15 +4337,37 @@ static int compare_groups_by_size(__isl_keep isl_id *id1,
 		if (table->el[i].id == id2)
 			size2 = table->el[i].size;
 	}
-	return size1 - size2;
+
+	if (desc)
+		return size1 - size2;
+	else
+		return size2 - size1;
 }
 
+static int compare_groups_by_size_asc(__isl_keep isl_id *id1,
+				      __isl_keep isl_id *id2, void *user)
+{
+	struct group_size_table *table = user;
+	return compare_groups_by_size(id1, id2, table, 0);
+}
 
-static isl_stat sort_group_list(isl_ctx *ctx, struct isl_sched_graph *graph)
+static int compare_groups_by_size_desc(__isl_keep isl_id *id1,
+				       __isl_keep isl_id *id2, void *user)
+{
+	struct group_size_table *table = user;
+	return compare_groups_by_size(id1, id2, table, 1);
+}
+
+static isl_stat sort_group_list(isl_ctx *ctx, struct isl_sched_graph *graph,
+				int descending)
 {
 	struct group_size_table *table = group_size_table_for_graph(ctx, graph);
-	graph->group_list = isl_id_list_sort(graph->group_list,
-					     &compare_groups_by_size, table);
+	int (*comp)(__isl_keep isl_id *, __isl_keep isl_id *, void *);
+
+	comp = descending ? &compare_groups_by_size_desc
+			  : &compare_groups_by_size_asc;
+
+	graph->group_list = isl_id_list_sort(graph->group_list, comp, table);
 	group_size_table_free(table);
 
 	return isl_stat_ok;
@@ -4548,7 +4569,7 @@ static isl_stat setup_spatial_carry_lp(isl_ctx *ctx,
 	space = isl_space_set_alloc(ctx, 0, total);
 	isl_basic_set_free(graph->lp);
 
-	sort_group_list(ctx, graph);
+	sort_group_list(ctx, graph, spatial_bound != -1);
 
 	// decision variable sums (2) OR plain sums (2)
 	n_eq += 2 + parametric + 1 + 1;
