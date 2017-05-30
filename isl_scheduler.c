@@ -4473,7 +4473,7 @@ static isl_stat require_fixed_bounds(struct isl_sched_graph *graph,
 	int start = 1 + param_pos + 2 * nparam;
 
 	for (i = 0; i < (2 * nparam + 1) * graph->n_groups; ++i) {
-		int k = isl_basic_set_alloc_inequality(graph->lp);
+		int k = isl_basic_set_alloc_equality(graph->lp);
 		if (k < 0)
 			return isl_stat_error;
 		isl_seq_clr(graph->lp->ineq[k], 1 + total);
@@ -4587,7 +4587,7 @@ static isl_stat setup_spatial_carry_lp(isl_ctx *ctx,
 
 	// fixer inequalities for bounds
 	if (fix_bounds)
-		n_ineq += (2 * nparam + 1) * graph->n_groups;
+		n_eq += (2 * nparam + 1) * graph->n_groups;
 
 	graph->lp = isl_basic_set_alloc_space(space, 0, n_eq, n_ineq);
 
