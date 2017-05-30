@@ -7554,9 +7554,9 @@ __isl_give isl_id_list *get_group_ids(struct isl_sched_graph *graph, void *user)
 	if (isl_id_to_id_foreach(graph->ref_to_group,
 				 &add_key_to_list_if_value_matches,
 				 &data) < 0)
-		return isl_id_list_free(ref_list);
+		return isl_id_list_free(data.list);
 
-	return ref_list;
+	return data.list;
 }
 
 
@@ -7578,7 +7578,7 @@ static isl_bool remove_first_carrying_spatial_proximity_edges(
 	isl_id *id = NULL;
 	isl_map *arr_tagged = NULL;
 	isl_int pbound, cbound;
-	isl_id_list *ref_ids;
+	isl_id_list *ref_ids = NULL;
 
 	isl_int_init(pbound);
 	isl_int_init(cbound);
@@ -7625,15 +7625,15 @@ static isl_bool remove_first_carrying_spatial_proximity_edges(
 			r = map_has_tag(arr_tagged, id, isl_dim_out);
 			if (r < 0)
 				goto cleanup;
-			if (r) {
+			if (r)
 				graph_empty_and_remove_spatial_edge(graph, edge);
-			}
 		}
 	}
 
 	r = isl_bool_true;
 cleanup:
 	isl_id_free(id);
+	isl_id_list_free(ref_ids);
 	isl_map_free(arr_tagged);
 	isl_int_clear(pbound);
 	isl_int_clear(cbound);
