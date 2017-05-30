@@ -520,13 +520,14 @@ __isl_give isl_schedule_constraints *isl_schedule_constraints_apply(
 			goto error;
 	}
 
-	sc->counted_accesses = apply(sc->counted_accesses, umap, 1);
-	if (!sc->counted_accesses)
-		goto error;
+	sc->domain = isl_union_set_apply(sc->domain,
+					 isl_union_map_copy(umap));
+	if (!sc->domain)
+		return isl_schedule_constraints_free(sc);
 
 	sc->counted_accesses = apply_domain_factor_domain(
 		sc->counted_accesses, umap);
-	if (!sc->domain)
+	if (!sc->counted_accesses)
 		return isl_schedule_constraints_free(sc);
 
 	return sc;
