@@ -200,6 +200,9 @@ ISL_ARG_INT(struct isl_options, schedule_spatial_distance, 0,
 ISL_ARG_BOOL(struct isl_options, schedule_keep_proximity, 0,
 	"schedule-keep-proximity", 0,
 	"do not remove (spatial) proximity that are carried by the schedule")
+ISL_ARG_BOOL(struct isl_options, schedule_memory_coalescing, 0,
+	"schedule-memory-coalescing", 0,
+	"carry spatial proximity constraints in the outermost parallel loop")
 ISL_ARG_PHANTOM_USER_CHOICE_F(0, "schedule-fuse", fuse, &set_fuse,
 	ISL_SCHEDULE_FUSE_MAX, "level of fusion during scheduling",
 	ISL_ARG_HIDDEN)

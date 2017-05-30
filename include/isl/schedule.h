@@ -63,6 +63,9 @@ int isl_options_get_schedule_spatial_fusion(isl_ctx *ctx);
 isl_stat isl_options_set_schedule_spatial_distance(isl_ctx *ctx, int val);
 int isl_options_get_schedule_spatial_distance(isl_ctx *ctx);
 
+isl_stat isl_options_set_schedule_memory_coalescing(isl_ctx *ctx, int val);
+int isl_options_get_schedule_memory_coalescing(isl_ctx *ctx);
+
 __isl_give isl_schedule_constraints *isl_schedule_constraints_copy(
 	__isl_keep isl_schedule_constraints *sc);
 __isl_give isl_schedule_constraints *isl_schedule_constraints_on_domain(

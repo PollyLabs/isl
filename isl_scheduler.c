@@ -759,7 +759,8 @@ struct isl_sched_graph {
 	int array_to_ref_borrowed;
 	isl_id_to_id *ref_to_group;
 	isl_map_to_basic_set *pattern_to_group_set; // FIXME: this should be map_to_id, but we don't have it yet;  a general-purpose hash map is tricky to use
-	int n_groups;
+	isl_id_list *group_list;
+	int n_groups;  // FIXME: this is equal to group_list->n
 };
 
 static __isl_give isl_id_list *graph_refs_to_same_array(isl_ctx *ctx,
@@ -1133,6 +1134,7 @@ static void graph_free(isl_ctx *ctx, struct isl_sched_graph *graph)
 
 	isl_id_to_id_free(graph->ref_to_group);
 	isl_map_to_basic_set_free(graph->pattern_to_group_set);
+	isl_id_list_free(graph->group_list);
 }
 
 /* For each "set" on which this function is called, increment
@@ -1947,9 +1949,12 @@ static isl_stat ref_to_group_add(__isl_take isl_map *map, void *user)
 
 		snprintf(name, 20, "__ppcg_group%d", graph->n_groups++);
 		group_id = isl_id_alloc(ctx, name, NULL);
+
 		space = isl_space_set_alloc(ctx, 0, 0);
 		space = isl_space_set_tuple_id(space, isl_dim_set,
 					       isl_id_copy(group_id));
+		graph->group_list = isl_id_list_add(graph->group_list,
+						    isl_id_copy(group_id));
 		group_id_wrapper = isl_basic_set_universe(space);
 		graph->pattern_to_group_set = isl_map_to_basic_set_set(
 			graph->pattern_to_group_set, map, group_id_wrapper);
@@ -2103,6 +2108,7 @@ static isl_stat graph_init(struct isl_sched_graph *graph,
 	graph->array_to_ref_borrowed = 0;
 
 	graph->n_groups = 0;
+	graph->group_list = isl_id_list_alloc(ctx, 1);
 	r = init_ref_to_group(graph);
 
 	return r;
@@ -2846,6 +2852,7 @@ struct add_spatial_proximity_data {
 	struct isl_sched_edge *edge;
 	isl_basic_set *coef;
 	isl_dim_map *dim_map;
+	int grouped;
 };
 
 static isl_stat add_spatial_proximity_constraints_single(
@@ -2871,12 +2878,33 @@ static isl_stat add_spatial_proximity_constraints_single(
 	if ((r = extract_ids_from_tags(map, &id1, &id2)) < 0)
 		return r;
 
-	start1 = id_list_index_of(graph->id_list, id1);
-	start2 = id_list_index_of(graph->id_list, id2);
-	if (start1 < 0 || start2 < 0)
-		return isl_stat_error;
-	start1 = start1 * (2 * nparam + 1) + 2 + 2 * n_arrays + 2 + 2*nparam;/*#4*/
-	start2 = start2 * (2 * nparam + 1) + 2 + 2 * n_arrays + 2 + 2*nparam;/*#4*/
+	if (data->grouped) {
+		isl_id *group_id1 = isl_id_to_id_get(graph->ref_to_group,
+						     isl_id_copy(id1));
+		isl_id *group_id2 = isl_id_to_id_get(graph->ref_to_group,
+						     isl_id_copy(id2));
+		if (!group_id1 || !group_id2)
+			isl_die(ctx, isl_error_internal,
+				"Could not map ref id to group id",
+				return isl_stat_error);
+		start1 = id_list_index_of(graph->group_list, group_id1);
+		start2 = id_list_index_of(graph->group_list, group_id2);
+		isl_id_free(group_id1);
+		isl_id_free(group_id2);
+
+		start1 = 2 + 2 * graph->n_groups + 2 + 2 +
+				start1 * (2 * nparam + 1) + 2*nparam;
+		start2 = 2 + 2 * graph->n_groups + 2 + 2 +
+				start2 * (2 * nparam + 1) + 2*nparam;
+
+	} else {
+		start1 = id_list_index_of(graph->id_list, id1);
+		start2 = id_list_index_of(graph->id_list, id2);
+		if (start1 < 0 || start2 < 0)
+			return isl_stat_error;
+		start1 = start1 * (2 * nparam + 1) + 2 + 2 * n_arrays + 2 + 2*nparam;/*#4*/
+		start2 = start2 * (2 * nparam + 1) + 2 + 2 * n_arrays + 2 + 2*nparam;/*#4*/
+	}
 
 	dim_map1 = isl_dim_map_copy(ctx, dim_map);
 	isl_dim_map_range(dim_map1, start1, 0, 0, 0, 1, 1);
@@ -2909,7 +2937,7 @@ static isl_stat add_spatial_proximity_constraints_single(
 static isl_stat add_intra_spatial_proximity_constraints(
 	struct isl_sched_graph *graph,
 	struct isl_sched_edge *edge,
-	int s, int local)
+	int s, int local, int grouped)
 {
 	int offset;
 	isl_basic_set *coef;
@@ -2930,7 +2958,7 @@ static isl_stat add_intra_spatial_proximity_constraints(
 	if (!local) {
 		isl_union_map *spatial_proximity = edge->array_tagged_map;
 		struct add_spatial_proximity_data data = {
-			graph, edge, coef, dim_map
+			graph, edge, coef, dim_map, grouped
 		};
 		if (isl_union_map_foreach_map(spatial_proximity,
 				&add_spatial_proximity_constraints_single,
@@ -2953,7 +2981,7 @@ static isl_stat add_intra_spatial_proximity_constraints(
 static isl_stat add_inter_spatial_proximity_constraints(
 	struct isl_sched_graph *graph,
 	struct isl_sched_edge *edge,
-	int s, int local)
+	int s, int local, int grouped)
 {
 	isl_basic_set *coef;
 	int offset;
@@ -2977,7 +3005,7 @@ static isl_stat add_inter_spatial_proximity_constraints(
 	dim_map = inter_dim_map(ctx, graph, src, dst, offset, -s);
 	if (!local) {
 		struct add_spatial_proximity_data data = {
-			graph, edge, coef, dim_map
+			graph, edge, coef, dim_map, grouped
 		};
 		if (isl_union_map_foreach_map(spatial_proximity,
 				&add_spatial_proximity_constraints_single,
@@ -3297,16 +3325,6 @@ static int hash_table_isl_id_eq(const void *entry, const void *val)
 	return entry == val;  // ids are pointer-comparable
 }
 
-static isl_stat add_id_to_list(void **element, void *user)
-{
-	isl_id_list *list = *(isl_id_list **) user;
-	isl_id *id = *element;
-
-	list = isl_id_list_add(list, id);
-	*(isl_id_list **) user = list;
-	return isl_stat_ok;
-}
-
 static isl_stat add_ids_to_hash_table(__isl_take isl_map *map, void *user)
 {
 	isl_id *id1, *id2;
@@ -3340,7 +3358,7 @@ static isl_stat add_ids_to_hash_table(__isl_take isl_map *map, void *user)
 }
 
 static isl_stat add_spatial_proximity_constraints(isl_ctx *ctx,
-	struct isl_sched_graph *graph, int use_coincidence)
+	struct isl_sched_graph *graph, int use_coincidence, int grouped)
 {
 	int i;
 
@@ -3357,14 +3375,14 @@ static isl_stat add_spatial_proximity_constraints(isl_ctx *ctx,
 
 		if (edge->src == edge->dst) {
 			add_intra_spatial_proximity_constraints(
-				graph, edge, 1, local);
+				graph, edge, 1, local, grouped);
 			add_intra_spatial_proximity_constraints(
-				graph, edge, -1, local);
+				graph, edge, -1, local, grouped);
 		} else {
 			add_inter_spatial_proximity_constraints(
-				graph, edge, 1, local);
+				graph, edge, 1, local, grouped);
 			add_inter_spatial_proximity_constraints(
-				graph, edge, -1, local);
+				graph, edge, -1, local, grouped);
 		}
 	}
 
@@ -4205,7 +4223,8 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 		if (add_all_proximity_constraints(graph, use_coincidence,
 						  param_pos - 3, param_pos) < 0)
 			return isl_stat_error;
-		if (add_spatial_proximity_constraints(ctx, graph, use_coincidence) < 0)
+		if (add_spatial_proximity_constraints(ctx, graph,
+						      use_coincidence, 0) < 0)
 			return isl_stat_error;
 	}
 	if (add_all_validity_constraints(graph, use_coincidence) < 0)
@@ -4213,6 +4232,380 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	graph->lp = isl_basic_set_simplify(graph->lp);
 
+	return isl_stat_ok;
+}
+
+struct group_size_table_el {
+	isl_id *id;
+	int size;
+};
+
+struct group_size_table {
+	struct group_size_table_el *el;
+	int n;
+};
+
+static __isl_give struct group_size_table *group_size_table_alloc_zero(
+	isl_ctx *ctx, int n)
+{
+	int i;
+	struct group_size_table *table = isl_malloc_or_die(ctx,
+					sizeof(struct group_size_table));
+	struct group_size_table_el *table_els =
+		isl_malloc_or_die(ctx, n * sizeof(struct group_size_table_el));
+	if (!table || !table_els)
+		return NULL;
+
+	for (i = 0; i < n; ++i) {
+		table_els[i].id = NULL;
+		table_els[i].size = 0;
+	}
+	table->el = table_els;
+	table->n = n;
+
+	return table;
+}
+
+static __isl_null struct group_size_table *group_size_table_free(
+	struct group_size_table *gst)
+{
+	int i = 0;
+	for (i = 0; i < gst->n; ++i)
+		isl_id_free(gst->el[i].id);
+	free(gst->el);
+	free(gst);
+	return NULL;
+}
+
+static isl_stat count_refs_in_group(__isl_take isl_id *ref_id,
+				    __isl_take isl_id *group_id, void *user)
+{
+	int i;
+	int first_null = -1;
+	struct group_size_table *table = user;
+
+	isl_id_free(ref_id);
+
+	for (i = 0; i < table->n; ++i) {
+		if (table->el[i].id == group_id) {
+			table->el[i].size += 1;
+			isl_id_free(group_id);
+			return isl_stat_ok;
+		} else if (table->el[i].id == NULL && first_null == -1) {
+			first_null = i;
+		}
+	}
+
+	if (first_null == -1) {
+		isl_ctx *ctx = isl_id_get_ctx(group_id);
+		isl_id_free(group_id);
+		isl_die(ctx, isl_error_internal,
+			"Could not find access group and no empty group slot left",
+			return isl_stat_error);
+	}
+
+	table->el[first_null].id = group_id;
+	table->el[first_null].size = 1;
+	return isl_stat_ok;
+}
+
+static __isl_give struct group_size_table *group_size_table_for_graph(
+	isl_ctx *ctx, struct isl_sched_graph *graph)
+{
+	struct group_size_table *table =
+			group_size_table_alloc_zero(ctx, graph->n_groups);
+	if (isl_id_to_id_foreach(graph->ref_to_group,
+				 &count_refs_in_group, table) < 0)
+		return group_size_table_free(table);
+
+	return table;
+}
+
+static int compare_groups_by_size(__isl_keep isl_id *id1,
+				  __isl_keep isl_id *id2, void *user)
+{
+	int i;
+	int size1 = 0;
+	int size2 = 0;
+	struct group_size_table *table = user;
+
+	for (i = 0; i < table->n; ++i) {
+		if (table->el[i].id == id1)
+			size1 = table->el[i].size;
+		if (table->el[i].id == id2)
+			size2 = table->el[i].size;
+	}
+	return size1 - size2;
+}
+
+
+static isl_stat sort_group_list(isl_ctx *ctx, struct isl_sched_graph *graph)
+{
+	struct group_size_table *table = group_size_table_for_graph(ctx, graph);
+	graph->group_list = isl_id_list_sort(graph->group_list,
+					     &compare_groups_by_size, table);
+	group_size_table_free(table);
+
+	return isl_stat_ok;
+}
+
+static isl_stat add_groupwise_decisions(struct isl_sched_graph *graph,
+					int first_pos, int param_pos,
+					int upper_bound)
+{
+	// e >= 0, e <= 1, e <= bound, (L+1)*e >= bound
+	// where L is the upper bound of "bound"
+
+	// at this point, we only need non-parametric stuff
+
+	int i, j, k;
+	int nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
+	int total = isl_basic_set_dim(graph->lp, isl_dim_set);
+
+	for (i = 0; i < graph->n_groups; ++i) {
+		int pos = first_pos + 2 * i + 1;
+		int cst_pos = param_pos + (2 * nparam + 1) * i + 2 * nparam + 1;
+
+		// e <= constant  =>  constant - e >= 0
+		k = isl_basic_set_alloc_inequality(graph->lp);
+		if (k < 0)
+			return isl_stat_error;
+		isl_seq_clr(graph->lp->ineq[k], 1 + total);
+		isl_int_set_si(graph->lp->ineq[k][pos + 1], -1);
+		isl_int_set_si(graph->lp->ineq[k][cst_pos], 1);
+
+		// e >= 0
+		k = isl_basic_set_alloc_inequality(graph->lp);
+		if (k < 0)
+			return isl_stat_error;
+		isl_seq_clr(graph->lp->ineq[k], 1 + total);
+		isl_int_set_si(graph->lp->ineq[k][pos + 1], 1);
+
+		// e <= 1  =>  1 - e >= 0
+		k = isl_basic_set_alloc_inequality(graph->lp);
+		if (k < 0)
+			return isl_stat_error;
+		isl_seq_clr(graph->lp->ineq[k], 1 + total);
+		isl_int_set_si(graph->lp->ineq[k][0], 1);
+		isl_int_set_si(graph->lp->ineq[k][pos + 1], -1);
+
+		// (upper_bound + 1) * e >= constant
+		k = isl_basic_set_alloc_inequality(graph->lp);
+		if (k < 0)
+			return isl_stat_error;
+		isl_seq_clr(graph->lp->ineq[k], 1 + total);
+		isl_int_set_si(graph->lp->ineq[k][pos + 1], upper_bound + 1);
+		isl_int_set_si(graph->lp->ineq[k][cst_pos], -1);
+	}
+
+	return isl_stat_ok;
+}
+
+static isl_stat add_decision_variable_sums(struct isl_sched_graph *graph,
+					   int pos, int first_var)
+{
+	if (add_groups_sum_constraint(graph, pos, first_var, 1, 2,
+				      graph->n_groups) < 0)
+		return isl_stat_error;
+	if (add_groups_sum_constraint(graph, pos + 1, first_var + 1, 1, 2,
+				      graph->n_groups) < 0)
+		return isl_stat_error;
+	return isl_stat_ok;
+}
+
+static isl_stat require_one_decision_carried(struct isl_sched_graph *graph,
+					     int pos)
+{
+	int total = isl_basic_set_dim(graph->lp, isl_dim_set);
+	int k = isl_basic_set_alloc_inequality(graph->lp);
+	if (k < 0)
+		return isl_stat_error;
+
+	isl_seq_clr(graph->lp->ineq[k], 1 + total);
+	isl_int_set_si(graph->lp->ineq[k][0], -1);
+	isl_int_set_si(graph->lp->ineq[k][1 + pos], 1);
+	return isl_stat_ok;
+}
+
+static isl_stat require_zero_at(struct isl_sched_graph *graph, int pos)
+{
+	int total = isl_basic_set_dim(graph->lp, isl_dim_set);
+	int k = isl_basic_set_alloc_equality(graph->lp);
+	if (k < 0)
+		return isl_stat_error;
+
+	isl_seq_clr(graph->lp->eq[k], 1 + total);
+	isl_int_set_si(graph->lp->eq[k][1 + pos], 1);
+	return isl_stat_ok;
+}
+
+static isl_stat require_fixed_bounds(struct isl_sched_graph *graph,
+				     __isl_keep isl_vec *fix_bounds,
+				     int param_pos)
+{
+	int i;
+	int total = isl_basic_set_dim(graph->lp, isl_dim_set);
+	int nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
+	int start = 1 + param_pos + 2 * nparam;
+
+	for (i = 0; i < (2 * nparam + 1) * graph->n_groups; ++i) {
+		int k = isl_basic_set_alloc_inequality(graph->lp);
+		if (k < 0)
+			return isl_stat_error;
+		isl_int_set_si(graph->lp->ineq[k][start + i], -1);
+		isl_int_set(graph->lp->ineq[k][0], fix_bounds->el[start + i]);
+	}
+	return isl_stat_ok;
+}
+
+static isl_stat add_groupwise_sum_constraints(struct isl_sched_graph *graph,
+				int sum_start, int start, int param_pos)
+{
+	int i, nparam;
+
+	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
+
+	for (i = 0; i < graph->n_groups; ++i) {
+		if (add_groups_sum_constraint(graph, 2 * i + start,
+				param_pos + 2 * nparam + (2 * nparam + 1) * i,
+				2 * nparam, 2 * nparam + 1, 1) < 0)
+			return isl_stat_error;
+		if (add_groups_sum_constraint(graph, 2 * i + start + 1,
+				param_pos + 4 * nparam + (2 * nparam + 1) * i,
+				1, 2 * nparam + 1, 1) < 0)
+			return isl_stat_error;
+	}
+	if (add_groups_sum_constraint(graph, sum_start, param_pos + 2 * nparam,
+			2 * nparam, 2 * nparam + 1, graph->n_groups) < 0)
+		return isl_stat_error;
+	if (add_groups_sum_constraint(graph, sum_start + 1, param_pos + 4 * nparam,
+			1, 2 * nparam + 1, graph->n_groups) < 0)
+		return isl_stat_error;
+	return isl_stat_ok;
+}
+
+#define PROFITABLE_SPATIAL_BOUND 32
+
+// if "zero_param_sum" add an additional constraint to make parameter sum 0
+// if "spatial_bound" is not -1, use it as an upper bound for defining binary variables;
+//    otherwise, use plain sums instead of binary variables and no bounds
+// if "fix_bounds" is set, leave decision variables unconstrained, use values to constarin
+//    actual distance bounds (not sums or binary variables), use first two variables as
+//    temporal proximity sums
+static isl_stat setup_spatial_carry_lp(isl_ctx *ctx,
+	struct isl_sched_graph *graph, int spatial_bound, int zero_param_sum,
+	__isl_keep isl_vec *fix_bounds)
+{
+	int parametric;
+	unsigned nparam;
+	unsigned total;
+	int param_pos;
+	int n_eq, n_ineq;
+	int i;
+	isl_space *space;
+
+	parametric = ctx->opt->schedule_parametric;
+	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
+
+	if (!graph->ref_to_group || graph->n_groups == 0)
+		isl_die(ctx, isl_error_internal,
+			"Requested spatial-carry graph, but no access grouping",
+			return isl_stat_error);
+
+	// (# of param-carried, # of cst-carried),
+	// (decision var for sum of params !=, decision var for cst != 0) for each group,
+	// (sum of params, cst) for temporal
+	// sum of schedule params, sum of schedule coefficients
+
+	// Note that the 5-stage approach does not require decision variables for params
+	// We also recycle # of param-carried and # of cst-carried as sums of bounds
+
+	param_pos = 2 + 2 * graph->n_groups + 2 + 2;
+	total = param_pos;
+
+	// negative,positive parts of temporal bound param coefficients,
+	// then negative,positive parts of bound param coefficients,constant
+	// (it only appears inside decision before) for each temporal group,
+	total += 2 * nparam + (2 * nparam + 1) * graph->n_groups;
+
+	for (i = 0; i < graph->n; ++i) {
+		struct isl_sched_node *node = &graph->node[graph->sorted[i]];
+		if (node_update_vmap(node) < 0)
+			return isl_stat_error;
+		node->start = total;
+		total += 1 + node->nparam + 2 * node->nvar;
+	}
+
+	if (count_constraints(graph, &n_eq, &n_ineq, 1) < 0)
+		return isl_stat_error;
+	if (count_bound_constant_constraints(ctx, graph, &n_eq, &n_ineq) < 0)
+		return isl_stat_error;
+	if (count_bound_coefficient_constraints(ctx, graph, &n_eq, &n_ineq) < 0)
+		return isl_stat_error;
+	space = isl_space_set_alloc(ctx, 0, total);
+	isl_basic_set_free(graph->lp);
+
+	sort_group_list(ctx, graph);
+
+	// decision variable sums (2) OR plain sums (2)
+	n_eq += 2 + parametric + 1 + 1;
+
+	if (zero_param_sum)
+		n_eq += 1;
+
+	// decision variable inequalities + (1) decision sum >= 1
+	if (spatial_bound != -1)
+		n_ineq += 4 * graph->n_groups + 1;
+	// partial sums 2 * n_groups
+	else if (!fix_bounds)
+		n_eq += 2 * graph->n_groups;
+
+	// fixer inequalities for bounds
+	if (fix_bounds)
+		n_ineq += (2 * nparam + 1) * graph->n_groups;
+
+	graph->lp = isl_basic_set_alloc_space(space, 0, n_eq, n_ineq);
+
+	if (spatial_bound != -1) {
+		if (add_groupwise_decisions(graph, 2, param_pos + 2 * nparam,
+					    spatial_bound) < 0)
+			return isl_stat_error;
+		if (add_decision_variable_sums(graph, 0, 2) < 0)
+			return isl_stat_error;
+		if (require_one_decision_carried(graph, 1) < 0)
+			return isl_stat_error;
+	} else if (!fix_bounds){  // use sums (instead of decisions)
+		add_groupwise_sum_constraints(graph, 0, 2, param_pos);
+	}
+
+	if (fix_bounds) {
+		if (require_fixed_bounds(graph, fix_bounds, param_pos) < 0)
+			return isl_stat_error;
+	}
+
+	if (zero_param_sum) {
+		if (require_zero_at(graph, 0) < 0)
+			return isl_stat_error;
+	}
+
+	if (parametric && add_param_sum_constraint(graph, param_pos - 2) < 0)
+		return isl_stat_error;
+	if (add_var_sum_constraint(graph, param_pos - 1) < 0)
+		return isl_stat_error;
+	if (add_bound_constant_constraints(ctx, graph) < 0)
+		return isl_stat_error;
+	if (add_bound_coefficient_constraints(ctx, graph) < 0)
+		return isl_stat_error;
+	if (add_all_proximity_constraints(graph, 1,
+					  (fix_bounds ? 1 : (param_pos - 3)),
+					  param_pos) < 0)
+		return isl_stat_error;
+	if (add_spatial_proximity_constraints(ctx, graph, 1, 1) < 0)
+		return isl_stat_error;
+	if (add_all_validity_constraints(graph, 1) < 0)
+		return isl_stat_error;
+
+	graph->lp = isl_basic_set_simplify(graph->lp);
 	return isl_stat_ok;
 }
 
@@ -4306,15 +4699,13 @@ static __isl_give isl_mat *construct_trivial(__isl_keep isl_mat *indep)
  * In particular, the non-triviality region enforces that at least
  * one of the linear combinations in the rows of node->indep is non-zero.
  */
-static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
+static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
+				    int n_op)
 {
 	int i;
 	isl_vec *sol;
 	isl_basic_set *lp;
-	int n_op = 2;
 
-	if (has_any_spatial_proximity(graph) == isl_bool_true)
-		n_op = graph->id_list->n * 2 + 2;
 	for (i = 0; i < graph->n; ++i) {
 		struct isl_sched_node *node = &graph->node[i];
 		isl_mat *trivial;
@@ -5079,6 +5470,9 @@ static int extract_sub_graph(isl_ctx *ctx, struct isl_sched_graph *graph,
 	if (graph_init_id_rank_table(ctx, sub) < 0)
 		return -1;
 
+	sub->group_list = isl_id_list_alloc(ctx, 1); // FIXME: allocation here??
+	if (init_ref_to_group(sub) < 0)
+		return -1;
 
 	return 0;
 }
@@ -7121,65 +7515,240 @@ static void graph_empty_and_remove_spatial_edge(struct isl_sched_graph *graph,
 	graph_remove_edge(graph, edge);
 }
 
-/*
- * Returns true of at least one dependence was removed, false otherwise.
- */
-static isl_bool remove_carried_spatial_proximity_edges(
-	struct isl_sched_graph *graph, __isl_keep isl_vec *sol)
+__isl_give isl_id_list *get_list_ids(struct isl_sched_graph *graph, void *user)
 {
-	int i;
-	isl_bool r;
-	isl_id *id;
+	int index = *(int *) user;
+	isl_id *id = isl_id_list_get_id(graph->id_list, index);
+	isl_ctx *ctx = isl_id_list_get_ctx(graph->id_list);
+	isl_id_list *singular_list = isl_id_list_alloc(ctx, 1);
+	singular_list = isl_id_list_add(singular_list, id);
+	return singular_list;
+}
 
-	int debug_removed_edge = 0;
-	for (i = 0; i < graph->id_list->n; ++i) {
-		int index = 1 + 2*i;
-		if (!isl_int_is_zero(sol->el[index]) ||
-		    !isl_int_is_zero(sol->el[index + 1]))
+struct add_key_to_list_data {
+	isl_id *id;
+	isl_id_list *list;
+};
+
+isl_stat add_key_to_list_if_value_matches(__isl_take isl_id *key,
+					  __isl_take isl_id *value, void *user)
+{
+	struct add_key_to_list_data *data = user;
+	if (value == data->id)
+		data->list = isl_id_list_add(data->list, key);
+	else
+		isl_id_free(key);
+
+	isl_id_free(value);
+	return isl_stat_ok;
+}
+
+__isl_give isl_id_list *get_group_ids(struct isl_sched_graph *graph, void *user)
+{
+	int index = *(int *) user;
+	isl_id *group_id = isl_id_list_get_id(graph->group_list, index);
+	isl_ctx *ctx = isl_id_list_get_ctx(graph->group_list);
+	isl_id_list *ref_list = isl_id_list_alloc(ctx, 1);
+
+	struct add_key_to_list_data data = { group_id, ref_list };
+	if (isl_id_to_id_foreach(graph->ref_to_group,
+				 &add_key_to_list_if_value_matches,
+				 &data) < 0)
+		return isl_id_list_free(ref_list);
+
+	return ref_list;
+}
+
+
+// length: number of param/cst pairs
+// Returns true of at least one dependence was removed, false otherwise.
+// start: position of the first pair (in the LP, not solution)
+// param_bound: strict lower bound on parameter sum after which to remove,
+//              do not remove anything if -1
+// cst_bound: strict lower bound on constant after which to remove,
+//		do not remove anything if -1
+static isl_bool remove_first_carrying_spatial_proximity_edges(
+	struct isl_sched_graph *graph, __isl_keep isl_vec *sol,
+	int start, int length, int param_bound, int cst_bound,
+	__isl_give isl_id_list *(*get_ids)(struct isl_sched_graph *graph,
+					   void *))
+{
+	int i, j, n_ids;
+	isl_bool r;
+	isl_id *id = NULL;
+	isl_map *arr_tagged = NULL;
+	isl_int pbound, cbound;
+	isl_id_list *ref_ids;
+
+	isl_int_init(pbound);
+	isl_int_init(cbound);
+	isl_int_set_si(pbound, param_bound);
+	isl_int_set_si(cbound, cst_bound);
+
+	for (i = 0; i < length; ++i) {
+		int param_index = 1 + start + 2 * i;
+		int cst_index = 2 + start + 2 * i;
+		if ((param_bound != -1 && isl_int_gt(sol->el[param_index], pbound)) ||
+		    (cst_bound != -1 && isl_int_gt(sol->el[cst_index], cbound)))
 			break;
 	}
-	if (i == graph->id_list->n)
-		return isl_bool_false;
-
-	id = graph->id_list->p[i];
-
-	for (i = graph->n_edge - 1; i >= 0; --i) {
-		struct isl_sched_edge *edge = &graph->edge[i];
-		if (!is_spatial_proximity(edge))
-			continue;
-
-		if (isl_union_map_is_empty(edge->array_tagged_map))
-			continue;
-
-		isl_map *arr_tagged = isl_map_from_union_map(
-					isl_union_map_copy(edge->array_tagged_map));
-		r = map_has_tag(arr_tagged, id, isl_dim_in);
-		if (r < 0)
-			return r;
-		if (r) {
-			graph_empty_and_remove_spatial_edge(graph, edge);
-			debug_removed_edge = 1;
-			continue;
-		}
-
-		r = map_has_tag(arr_tagged, id, isl_dim_out);
-		if (r < 0)
-			return r;
-		if (r) {
-			graph_empty_and_remove_spatial_edge(graph, edge);
-			debug_removed_edge = 1;
-		}
-		isl_map_free(arr_tagged);
+	if (i >= length) {
+		r = isl_bool_false;
+		goto cleanup;
 	}
 
-	if (!debug_removed_edge) {
-		fprintf(stderr, "EDGE CARRIED BUT NO DEPENDENCE "
-				"WITH CORRESPONDING TAG!");
-	}
-	isl_assert(isl_vec_get_ctx(sol), debug_removed_edge,
-		   return isl_bool_false);
+	ref_ids = get_ids(graph, &i);
+	n_ids = isl_id_list_n_id(ref_ids);
 
-	return isl_bool_true;
+	for (j = 0; j < n_ids; ++j) {
+		isl_id_free(id);
+		id = isl_id_list_get_id(ref_ids, j);
+		for (i = graph->n_edge - 1; i >= 0; --i) {
+			struct isl_sched_edge *edge = &graph->edge[i];
+			arr_tagged = isl_map_free(arr_tagged);
+			if (!is_spatial_proximity(edge))
+				continue;
+
+			if (isl_union_map_is_empty(edge->array_tagged_map))
+				continue;
+
+			arr_tagged = isl_map_from_union_map(
+				isl_union_map_copy(edge->array_tagged_map));
+			r = map_has_tag(arr_tagged, id, isl_dim_in);
+			if (r < 0)
+				goto cleanup;
+			if (r) {
+				graph_empty_and_remove_spatial_edge(graph, edge);
+				continue;
+			}
+
+			r = map_has_tag(arr_tagged, id, isl_dim_out);
+			if (r < 0)
+				goto cleanup;
+			if (r) {
+				graph_empty_and_remove_spatial_edge(graph, edge);
+			}
+		}
+	}
+
+	r = isl_bool_true;
+cleanup:
+	isl_id_free(id);
+	isl_map_free(arr_tagged);
+	isl_int_clear(pbound);
+	isl_int_clear(cbound);
+
+	return r;
+}
+
+static isl_stat minimize_proximity(isl_ctx *ctx,
+	struct isl_sched_graph *graph, int use_coincidence,
+	int has_spatial_proximity, isl_vec **psol)
+{
+	isl_bool carries_spatial;
+	isl_vec *sol = *psol;
+	int n_op = 2;
+
+	if (has_spatial_proximity)
+		n_op = graph->id_list->n * 2 + 2;
+
+	do {
+		if (setup_lp(ctx, graph, use_coincidence) < 0)
+			return isl_stat_error;
+		isl_vec_free(sol);
+		sol = solve_lp(ctx, graph, n_op);
+		if (!sol)
+			return isl_stat_error;
+		if (sol->size == 0)
+			break;
+		if (!has_spatial_proximity)
+			break;
+		if (graph->n_row == graph->maxvar - 1)
+			break;
+
+		carries_spatial =
+			remove_first_carrying_spatial_proximity_edges(
+				graph, sol, 0, graph->id_list->n, 0, 0,
+				&get_list_ids);
+
+		if (carries_spatial < 0)
+			return isl_stat_error;
+	} while (carries_spatial);
+
+	*psol = sol;
+	return isl_stat_ok;
+}
+
+static isl_vec *find_coincident_spatial_solution(isl_ctx *ctx,
+	struct isl_sched_graph *graph)
+{
+	if (setup_spatial_carry_lp(ctx, graph, -1, 0, NULL) < 0)
+		return NULL;
+	return solve_lp(ctx, graph, 2);
+}
+
+static isl_vec *find_coincident_spatial_constant_bound_solution(isl_ctx *ctx,
+	struct isl_sched_graph *graph, isl_vec *sol)
+{
+	isl_bool r;
+	int n_op = 2 + 2 * graph->n_groups + 2 + 2;
+
+	// Remove parametric one by one
+	do {
+		r = remove_first_carrying_spatial_proximity_edges(graph,
+			sol, 2, graph->n_groups, 0, -1, &get_group_ids);
+		if (setup_spatial_carry_lp(ctx, graph, -1, 0, NULL) < 0) {
+			r = isl_bool_error;
+			break;
+		}
+		isl_vec_free(sol);
+		sol = solve_lp(ctx, graph, n_op);
+	} while (r > 0);
+	if (r < 0)
+		return isl_vec_free(sol);
+	if (sol->size == 0)
+		isl_die(ctx, isl_error_internal,
+			"found an empty solution after relaxing constraints",
+			return isl_vec_free(sol));
+
+	// Remove large one by one
+	do {
+		r = remove_first_carrying_spatial_proximity_edges(graph,
+			sol, 2, graph->n_groups, -1, PROFITABLE_SPATIAL_BOUND,
+			&get_group_ids);
+		if (setup_spatial_carry_lp(ctx, graph, -1, 1, NULL) < 0) {
+			r = isl_bool_error;
+			break;
+		}
+		isl_vec_free(sol);
+		sol = solve_lp(ctx, graph, n_op);
+	} while (r > 0);
+	if (r < 0)
+		return isl_vec_free(sol);
+	if (sol->size == 0)
+		isl_die(ctx, isl_error_internal,
+			"found an empty solution after relaxing constraints",
+			return isl_vec_free(sol));
+
+	// setup problem that carries at least one and solve it
+	// returns an empty solution if infeasible (fallback to default)
+	if (setup_spatial_carry_lp(ctx, graph, PROFITABLE_SPATIAL_BOUND,
+			1, NULL) < 0)
+		return isl_vec_free(sol);
+	isl_vec_free(sol);
+	sol = solve_lp(ctx, graph, n_op);
+	if (sol->size == 0)
+		return sol;
+
+	// fix bounds, remove spatial prefix parts, optimize for temporal
+	if (setup_spatial_carry_lp(ctx, graph, -1, 0, sol) < 0)
+		return isl_vec_free(sol);
+	if (sol->size == 0)
+		isl_die(ctx, isl_error_internal,
+			"found an empty solution after variable reordering",
+			return isl_vec_free(sol));
+
+	return sol;
 }
 
 /* Construct a band of schedule rows for a connected dependence graph.
@@ -7228,6 +7797,7 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 	int continue_coincidence = 1;
 	int avoid_inner;
 	int has_spatial_proximity = has_any_spatial_proximity(graph);
+	int memory_coalescing;
 
 	if (sort_sccs(graph) < 0)
 		return isl_stat_error;
@@ -7246,43 +7816,50 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 	}
 
 	avoid_inner = ctx->opt->schedule_avoid_inner_coincidence;
+	memory_coalescing = ctx->opt->schedule_memory_coalescing;
 
 	use_coincidence = has_coincidence;
 	while (graph->n_row < graph->maxvar) {
 		isl_vec *sol = NULL;
 		int violated;
 		int coincident;
-		isl_bool carries_spatial;
+		int carry_spatial_proximity;
 
 		graph->src_scc = -1;
 		graph->dst_scc = -1;
 
 		use_coincidence = use_coincidence && continue_coincidence;
+		carry_spatial_proximity = memory_coalescing &&
+				has_spatial_proximity && use_coincidence;
 
-		do {
-			if (setup_lp(ctx, graph, use_coincidence) < 0)
-				return isl_stat_error;
-			isl_vec_free(sol);
-			sol = solve_lp(ctx, graph);
+		if (carry_spatial_proximity) {
+			sol = find_coincident_spatial_solution(ctx, graph);
 			if (!sol)
 				return isl_stat_error;
 			if (sol->size == 0)
-				break;
-			if (!has_spatial_proximity)
-				break;
-			if (graph->n_row == graph->maxvar - 1)
-				break;
+				goto handle_empty_sol;
 
-			carries_spatial =
-				remove_carried_spatial_proximity_edges(graph,
-								       sol);
-			if (carries_spatial < 0)
+			sol = find_coincident_spatial_constant_bound_solution(
+				ctx, graph, sol);
+			if (!sol)
 				return isl_stat_error;
-		} while (carries_spatial);
+			if (sol->size == 0)
+				memory_coalescing = 0;
+			// what if it cannot find something in the first parallel dim?  do we keep looking in the next dim?  why wouldn't it be able to find something in the first and would in the second, they are permutable?  so stop looking in this band...
+		}
+
+		if (!carry_spatial_proximity) {
+			sol = isl_vec_free(sol);
+			if (minimize_proximity(ctx, graph, use_coincidence,
+					       has_spatial_proximity, &sol) < 0)
+				return isl_stat_error;
+		}
 
 		if (sol->size == 0) {
-			int empty = graph->n_total_row == graph->band_start;
-			int keep_band = avoid_inner &&
+			int empty, keep_band;
+handle_empty_sol:
+			empty = graph->n_total_row == graph->band_start;
+			keep_band = avoid_inner &&
 				((graph->maxvar - graph->n_row) <= 2);
 
 			isl_vec_free(sol);
