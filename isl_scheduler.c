@@ -7690,8 +7690,11 @@ static isl_vec *find_coincident_spatial_solution(isl_ctx *ctx,
 static isl_vec *find_coincident_spatial_constant_bound_solution(isl_ctx *ctx,
 	struct isl_sched_graph *graph, isl_vec *sol)
 {
-	isl_bool r;
+	isl_bool r = isl_bool_false;
 	int n_op = 2 + 2 * graph->n_groups + 2 + 2;
+
+	isl_assert(ctx, sol && sol->size != 0,
+		   "previous solution should exist");
 
 	// Remove parametric one by one
 	do {
