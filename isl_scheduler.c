@@ -8222,10 +8222,25 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 		use_coincidence = use_coincidence && continue_coincidence;
 		has_spatial_proximity = has_nonempty_spatial_proximity(graph);
 		carry_spatial_proximity = memory_coalescing &&
-				has_spatial_proximity && use_coincidence &&
-				!graph->found_one_coalescing;
+				has_spatial_proximity &&
+				!graph->found_one_coalescing &&
+				(use_coincidence || !has_coincidence);
+		// ^ if coincidence was disabled, than do not carry
+		// if no coincidence is present -- everything is coincident, so use it
+		// without enforcing
 
 		if (carry_spatial_proximity) {
+			sol = compute_spatial_carrying_sol(ctx, graph,
+					use_coincidence);
+			if (!sol)
+				return isl_stat_error;
+			if (sol->size == 0) {
+				memory_coalescing = 0;
+				goto handle_empty_sol;
+			} else {
+				graph->found_one_coalescing = 1;
+			}
+
 			sol = find_coincident_spatial_solution(ctx, graph);
 			if (!sol)
 				return isl_stat_error;
