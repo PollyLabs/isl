@@ -6393,7 +6393,9 @@ static __isl_give isl_vec *compute_spatial_carrying_sol(isl_ctx *ctx,
 	n_spatial_inter = isl_basic_set_list_n_basic_set(spatial_carry.inter);
 
 	if (setup_spatial_carry_lp2(ctx, graph, &validity_carry,
-				    &spatial_carry, &coincidence_carry) < 0)
+				    &spatial_carry,
+				    use_coincidence ? &coincidence_carry
+						    : NULL) < 0)
 		isl_die(ctx, isl_error_internal, "could not set up the LP",
 			return NULL);
 
