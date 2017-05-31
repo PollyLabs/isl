@@ -5857,7 +5857,8 @@ static isl_stat add_intra_constraints(struct isl_sched_graph *graph,
 	ctx = isl_basic_set_get_ctx(coef);
 	offset = coef_var_offset(coef);
 	dim_map = intra_dim_map(ctx, graph, node, offset, 1);
-	isl_dim_map_range(dim_map, 3 + pos, 0, 0, 0, 1, -1);
+	if (pos >= 0)
+		isl_dim_map_range(dim_map, 3 + pos, 0, 0, 0, 1, -1);
 	graph->lp = add_constraints_dim_map(graph->lp, coef, dim_map);
 
 	return isl_stat_ok;
@@ -5993,6 +5994,7 @@ struct isl_add_all_constraints_data {
 	isl_ctx *ctx;
 	struct isl_sched_graph *graph;
 	int carry_inter;
+	int carry_intra;
 	int pos;
 };
 
@@ -6012,12 +6014,15 @@ static isl_stat lp_add_intra(__isl_take isl_basic_set *coef, void *user)
 	struct isl_add_all_constraints_data *data = user;
 	isl_space *space;
 	struct isl_sched_node *node;
+	int pos;
 
 	space = isl_basic_set_get_space(coef);
 	space = isl_space_range(isl_space_unwrap(space));
 	node = graph_find_compressed_node(data->ctx, data->graph, space);
 	isl_space_free(space);
-	return add_intra_constraints(data->graph, node, coef, data->pos++);
+
+	pos = data->carry_intra ? data->pos++ : -1;
+	return add_intra_constraints(data->graph, node, coef, pos);
 }
 
 /* Add the constraints "coef" derived from an edge from a node j
@@ -6060,9 +6065,10 @@ static isl_stat lp_add_inter(__isl_take isl_basic_set *coef, void *user)
  */
 static isl_stat add_all_constraints(isl_ctx *ctx, struct isl_sched_graph *graph,
 	__isl_keep isl_basic_set_list *intra,
-	__isl_keep isl_basic_set_list *inter, int carry_inter)
+	__isl_keep isl_basic_set_list *inter, int carry_inter, int carry_intra)
 {
-	struct isl_add_all_constraints_data data = { ctx, graph, carry_inter };
+	struct isl_add_all_constraints_data data = { ctx, graph, carry_inter,
+						     carry_intra};
 
 	data.pos = 0;
 	if (isl_basic_set_list_foreach(intra, &lp_add_intra, &data) < 0)
@@ -6110,6 +6116,36 @@ static isl_stat count_all_constraints(__isl_keep isl_basic_set_list *intra,
 	*n_eq = data.n_eq;
 	*n_ineq = data.n_ineq;
 
+	return isl_stat_ok;
+}
+
+static isl_stat add_carry_prefix(struct isl_sched_graph *graph, int n_edge)
+{
+	int i, k;
+	int total = isl_basic_set_dim(graph->lp, isl_dim_set);
+
+	k = isl_basic_set_alloc_equality(graph->lp);
+	if (k < 0)
+		return isl_stat_error;
+	isl_seq_clr(graph->lp->eq[k], 1 + total);
+	isl_int_set_si(graph->lp->eq[k][0], -n_edge);
+	isl_int_set_si(graph->lp->eq[k][1], 1);
+	for (i = 0; i < n_edge; ++i)
+		isl_int_set_si(graph->lp->eq[k][4 + i], 1);
+
+	if (add_param_sum_constraint(graph, 1) < 0)
+		return isl_stat_error;
+	if (add_var_sum_constraint(graph, 2) < 0)
+		return isl_stat_error;
+
+	for (i = 0; i < n_edge; ++i) {
+		k = isl_basic_set_alloc_inequality(graph->lp);
+		if (k < 0)
+			return isl_stat_error;
+		isl_seq_clr(graph->lp->ineq[k], 1 + total);
+		isl_int_set_si(graph->lp->ineq[k][4 + i], -1);
+		isl_int_set_si(graph->lp->ineq[k][0], 1);
+	}
 	return isl_stat_ok;
 }
 
@@ -6180,33 +6216,110 @@ static isl_stat setup_carry_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	graph->lp = isl_basic_set_alloc_space(dim, 0, n_eq, n_ineq);
 	graph->lp = isl_basic_set_set_rational(graph->lp);
 
-	k = isl_basic_set_alloc_equality(graph->lp);
-	if (k < 0)
-		return isl_stat_error;
-	isl_seq_clr(graph->lp->eq[k], 1 + total);
-	isl_int_set_si(graph->lp->eq[k][0], -n_edge);
-	isl_int_set_si(graph->lp->eq[k][1], 1);
-	for (i = 0; i < n_edge; ++i)
-		isl_int_set_si(graph->lp->eq[k][4 + i], 1);
-
-	if (add_param_sum_constraint(graph, 1) < 0)
-		return isl_stat_error;
-	if (add_var_sum_constraint(graph, 2) < 0)
+	if (add_carry_prefix(graph, n_edge) < 0)
 		return isl_stat_error;
 
-	for (i = 0; i < n_edge; ++i) {
-		k = isl_basic_set_alloc_inequality(graph->lp);
-		if (k < 0)
-			return isl_stat_error;
-		isl_seq_clr(graph->lp->ineq[k], 1 + total);
-		isl_int_set_si(graph->lp->ineq[k][4 + i], -1);
-		isl_int_set_si(graph->lp->ineq[k][0], 1);
-	}
-
-	if (add_all_constraints(ctx, graph, intra, inter, carry_inter) < 0)
+	if (add_all_constraints(ctx, graph, intra, inter, carry_inter, 1) < 0)
 		return isl_stat_error;
 
 	return isl_stat_ok;
+}
+
+static isl_stat setup_spatial_carry_lp2(isl_ctx *ctx,
+	struct isl_sched_graph *graph, struct isl_carry *validity_carry,
+	struct isl_carry *spatial_carry)
+{
+	int n_validity_eq, n_validity_ineq, n_spatial_eq, n_spatial_ineq;
+	int n_eq, n_ineq;
+	int n_validity_intra, n_validity_inter, n_spatial_intra, n_spatial_inter;
+	unsigned total;
+	int i;
+	isl_space *space;
+
+	n_validity_intra = isl_basic_set_list_n_basic_set(validity_carry->intra);
+	n_validity_inter = isl_basic_set_list_n_basic_set(validity_carry->inter);
+	n_spatial_intra = isl_basic_set_list_n_basic_set(spatial_carry->intra);
+	n_spatial_inter = isl_basic_set_list_n_basic_set(spatial_carry->inter);
+
+
+	// actually setup lp
+	total = 3 + n_spatial_intra + n_spatial_inter;
+	for (i = 0; i < graph->n; ++i) {
+		struct isl_sched_node *node = &graph->node[graph->sorted[i]];
+		node->start = total;
+		total += 1 + node->nparam + 2 * node->nvar;
+	}
+
+	if (count_all_constraints(validity_carry->intra, validity_carry->inter,
+				  &n_validity_eq, &n_validity_ineq) < 0)
+		return isl_stat_error;
+	if (count_all_constraints(spatial_carry->intra, spatial_carry->inter,
+				  &n_spatial_eq, &n_spatial_ineq) < 0)
+		return isl_stat_error;
+	n_eq = n_spatial_eq + n_validity_eq;
+	n_ineq = n_spatial_ineq + n_validity_ineq;
+	n_eq += 3;
+	n_ineq += n_spatial_intra + n_spatial_inter;
+	isl_basic_set_free(graph->lp);
+	space = isl_space_set_alloc(ctx, 0, total);
+	graph->lp = isl_basic_set_alloc_space(space, 0, n_eq, n_ineq);
+	graph->lp = isl_basic_set_set_rational(graph->lp);
+
+	if (add_carry_prefix(graph, n_spatial_inter + n_spatial_intra) < 0)
+		return isl_stat_error;
+
+	if (add_all_constraints(ctx, graph, validity_carry->intra,
+				validity_carry->inter, 0, 0) < 0)
+		return isl_stat_error;
+
+	if (add_all_constraints(ctx, graph, spatial_carry->intra,
+				spatial_carry->inter, 1, 1) < 0)
+		return isl_stat_error;
+
+	return isl_stat_ok;
+}
+
+static __isl_give isl_basic_set_list *collect_intra_validity(isl_ctx *ctx,
+	struct isl_sched_graph *graph, int validity, int coincidence,
+	int spatial_proximity, struct isl_exploit_lineality_data *data);
+static __isl_give isl_basic_set_list *collect_inter_validity(
+	struct isl_sched_graph *graph, int validity, int coincidence,
+	int spatial_proximity, struct isl_exploit_lineality_data *data);
+static __isl_give isl_vec *non_neg_lexmin(struct isl_sched_graph *graph,
+	__isl_take isl_basic_set *lp, int n_edge, int want_integral);
+
+static __isl_give isl_vec *compute_spatial_carrying_sol(isl_ctx *ctx,
+	struct isl_sched_graph *graph)
+{
+	struct isl_carry validity_carry = { 0 };
+	struct isl_carry spatial_carry = { 0 };
+	int n_spatial_inter, n_spatial_intra;
+	isl_vec *sol;
+
+	validity_carry.intra = collect_intra_validity(ctx, graph, 1, 1, 0,
+					&validity_carry.lineality);
+	validity_carry.inter = collect_inter_validity(graph, 1, 1, 0,
+					&validity_carry.lineality);
+	spatial_carry.intra = collect_intra_validity(ctx, graph, 0, 0, 1,
+					&spatial_carry.lineality);
+	spatial_carry.inter = collect_inter_validity(graph, 0, 0, 1,
+					&spatial_carry.lineality);
+
+	n_spatial_intra = isl_basic_set_list_n_basic_set(spatial_carry.intra);
+	n_spatial_inter = isl_basic_set_list_n_basic_set(spatial_carry.inter);
+
+	if (setup_spatial_carry_lp2(ctx, graph, &validity_carry,
+				    &spatial_carry) < 0)
+		isl_die(ctx, isl_error_internal, "could not set up the LP",
+			return NULL);
+
+	sol = non_neg_lexmin(graph, isl_basic_set_copy(graph->lp),
+			     n_spatial_inter + n_spatial_intra, 1);
+
+	isl_carry_clear(&validity_carry);
+	isl_carry_clear(&spatial_carry);
+
+	return sol;
 }
 
 static __isl_give isl_schedule_node *compute_component_schedule(
@@ -6861,14 +6974,17 @@ static __isl_give isl_union_map *exploit_inter_lineality(
 	return inter;
 }
 
-/* For each (conditional) validity edge in "graph",
+/* If "validity" is set, for each (conditional) validity edge in "graph",
  * add the corresponding dependence relation using "add"
  * to a collection of dependence relations and return the result.
  * If "coincidence" is set, then coincidence edges are considered as well.
+ * If "spatial_proximity" is set, then spatial proximity edges are considered
+ * as well.
  */
-static __isl_give isl_union_map *collect_validity(struct isl_sched_graph *graph,
+static __isl_give isl_union_map *collect_carry_edges(struct isl_sched_graph *graph,
 	__isl_give isl_union_map *(*add)(__isl_take isl_union_map *umap,
-		struct isl_sched_edge *edge), int coincidence)
+		struct isl_sched_edge *edge), int validity, int coincidence,
+	int spatial_proximity)
 {
 	int i;
 	isl_space *space;
@@ -6880,8 +6996,9 @@ static __isl_give isl_union_map *collect_validity(struct isl_sched_graph *graph,
 	for (i = 0; i < graph->n_edge; ++i) {
 		struct isl_sched_edge *edge = &graph->edge[i];
 
-		if (!is_any_validity(edge) &&
-		    (!coincidence || !is_coincidence(edge)))
+		if ((!validity || !is_any_validity(edge)) &&
+		    (!coincidence || !is_coincidence(edge)) &&
+		    (!spatial_proximity || !is_spatial_proximity(edge)))
 			continue;
 
 		umap = add(umap, edge);
@@ -6938,14 +7055,15 @@ static __isl_give isl_union_set *union_set_drop_parameters(
  * in multiple edges, then it only needs to be carried once.
  */
 static __isl_give isl_basic_set_list *collect_intra_validity(isl_ctx *ctx,
-	struct isl_sched_graph *graph, int coincidence,
-	struct isl_exploit_lineality_data *data)
+	struct isl_sched_graph *graph, int validity, int coincidence,
+	int spatial_proximity, struct isl_exploit_lineality_data *data)
 {
 	isl_union_map *intra;
 	isl_union_set *delta;
 	isl_basic_set_list *list;
 
-	intra = collect_validity(graph, &add_intra, coincidence);
+	intra = collect_carry_edges(graph, &add_intra, validity,
+				    coincidence, spatial_proximity);
 	delta = isl_union_map_deltas(intra);
 	delta = union_set_drop_parameters(delta);
 	delta = isl_union_set_remove_divs(delta);
@@ -6988,14 +7106,15 @@ static __isl_give isl_basic_set_list *collect_intra_validity(isl_ctx *ctx,
  * in multiple edges, then it only needs to be carried once.
  */
 static __isl_give isl_basic_set_list *collect_inter_validity(
-	struct isl_sched_graph *graph, int coincidence,
-	struct isl_exploit_lineality_data *data)
+	struct isl_sched_graph *graph, int validity, int coincidence,
+	int spatial_proximity, struct isl_exploit_lineality_data *data)
 {
 	isl_union_map *inter;
 	isl_union_set *wrap;
 	isl_basic_set_list *list;
 
-	inter = collect_validity(graph, &add_inter, coincidence);
+	inter = collect_carry_edges(graph, &add_inter, validity,
+				    coincidence, spatial_proximity);
 	inter = exploit_inter_lineality(inter, data);
 	inter = isl_union_map_remove_divs(inter);
 	wrap = isl_union_map_wrap(inter);
@@ -7066,9 +7185,9 @@ static __isl_give isl_vec *compute_carrying_sol(isl_ctx *ctx,
 	struct isl_carry carry = { 0 };
 	isl_vec *sol;
 
-	carry.intra = collect_intra_validity(ctx, graph, coincidence,
+	carry.intra = collect_intra_validity(ctx, graph, 1, coincidence, 0,
 						&carry.lineality);
-	carry.inter = collect_inter_validity(graph, coincidence,
+	carry.inter = collect_inter_validity(graph, 1, coincidence, 0,
 						&carry.lineality);
 	if (!carry.intra || !carry.inter)
 		goto error;
@@ -7870,10 +7989,13 @@ static isl_vec *find_coincident_spatial_constant_bound_solution(isl_ctx *ctx,
 
 	// setup problem that carries at least one and solve it
 	// returns an empty solution if infeasible (fallback to default)
-	if (setup_spatial_carry_lp(ctx, graph, PROFITABLE_SPATIAL_BOUND,
-			1, NULL) < 0)
-		return isl_vec_free(sol);
-	isl_vec_free(sol);
+//	if (setup_spatial_carry_lp(ctx, graph, PROFITABLE_SPATIAL_BOUND,
+//			1, NULL) < 0)
+//		return isl_vec_free(sol);
+//	isl_vec_free(sol);
+
+	return compute_spatial_carrying_sol(ctx, graph);
+
 	sol = solve_lp(ctx, graph, n_op);
 	if (sol->size == 0)
 		return sol;
