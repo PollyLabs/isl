@@ -6119,7 +6119,8 @@ static isl_stat count_all_constraints(__isl_keep isl_basic_set_list *intra,
 	return isl_stat_ok;
 }
 
-static isl_stat add_carry_prefix(struct isl_sched_graph *graph, int n_edge)
+static isl_stat add_carry_prefix(struct isl_sched_graph *graph, int n_edge,
+				 int carry_pos, int var_pos, int prm_pos)
 {
 	int i, k;
 	int total = isl_basic_set_dim(graph->lp, isl_dim_set);
@@ -6129,13 +6130,13 @@ static isl_stat add_carry_prefix(struct isl_sched_graph *graph, int n_edge)
 		return isl_stat_error;
 	isl_seq_clr(graph->lp->eq[k], 1 + total);
 	isl_int_set_si(graph->lp->eq[k][0], -n_edge);
-	isl_int_set_si(graph->lp->eq[k][1], 1);
+	isl_int_set_si(graph->lp->eq[k][1 + carry_pos], 1);
 	for (i = 0; i < n_edge; ++i)
 		isl_int_set_si(graph->lp->eq[k][4 + i], 1);
 
-	if (add_param_sum_constraint(graph, 1) < 0)
+	if (add_param_sum_constraint(graph, prm_pos) < 0)
 		return isl_stat_error;
-	if (add_var_sum_constraint(graph, 2) < 0)
+	if (add_var_sum_constraint(graph, var_pos) < 0)
 		return isl_stat_error;
 
 	for (i = 0; i < n_edge; ++i) {
@@ -6216,11 +6217,43 @@ static isl_stat setup_carry_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	graph->lp = isl_basic_set_alloc_space(dim, 0, n_eq, n_ineq);
 	graph->lp = isl_basic_set_set_rational(graph->lp);
 
-	if (add_carry_prefix(graph, n_edge) < 0)
+	if (add_carry_prefix(graph, n_edge, 0, 2, 1) < 0)
 		return isl_stat_error;
 
 	if (add_all_constraints(ctx, graph, intra, inter, carry_inter, 1) < 0)
 		return isl_stat_error;
+
+	return isl_stat_ok;
+}
+
+static isl_stat force_positive_schedule(struct isl_sched_graph *graph)
+{
+	int i, j, l;
+	int total = isl_basic_set_dim(graph->lp, isl_dim_set);
+
+	for (i = 0; i < graph->n; ++i) {
+		struct isl_sched_node *node = &graph->node[i];
+		int l;
+
+		l = isl_basic_set_alloc_inequality(graph->lp);
+		if (l < 0)
+			return isl_stat_error;
+		isl_seq_clr(graph->lp->ineq[l], 1 + total);
+		isl_int_set_si(graph->lp->ineq[l][0], -1);
+
+		for (j = 0; j < node->nvar; ++j) {
+			int pos = 1 + node->start + 2 * j;
+			int k = isl_basic_set_alloc_inequality(graph->lp);
+			if (k < 0)
+				return isl_stat_error;
+			isl_seq_clr(graph->lp->ineq[k], 1 + total);
+			isl_int_set_si(graph->lp->ineq[k][pos + 1], 1);
+			isl_int_set_si(graph->lp->ineq[k][pos], -1);
+
+			isl_int_set_si(graph->lp->ineq[l][pos + 1], 1);
+			isl_int_set_si(graph->lp->ineq[l][pos], -1);
+		}
+	}
 
 	return isl_stat_ok;
 }
@@ -6234,6 +6267,7 @@ static isl_stat setup_spatial_carry_lp2(isl_ctx *ctx,
 	int n_validity_intra, n_validity_inter, n_spatial_intra, n_spatial_inter;
 	unsigned total;
 	int i;
+	int n_positiveness_eq = 0;
 	isl_space *space;
 
 	n_validity_intra = isl_basic_set_list_n_basic_set(validity_carry->intra);
@@ -6241,13 +6275,13 @@ static isl_stat setup_spatial_carry_lp2(isl_ctx *ctx,
 	n_spatial_intra = isl_basic_set_list_n_basic_set(spatial_carry->intra);
 	n_spatial_inter = isl_basic_set_list_n_basic_set(spatial_carry->inter);
 
-
 	// actually setup lp
 	total = 3 + n_spatial_intra + n_spatial_inter;
 	for (i = 0; i < graph->n; ++i) {
 		struct isl_sched_node *node = &graph->node[graph->sorted[i]];
 		node->start = total;
 		total += 1 + node->nparam + 2 * node->nvar;
+		n_positiveness_eq += node->nvar;
 	}
 
 	if (count_all_constraints(validity_carry->intra, validity_carry->inter,
@@ -6260,12 +6294,21 @@ static isl_stat setup_spatial_carry_lp2(isl_ctx *ctx,
 	n_ineq = n_spatial_ineq + n_validity_ineq;
 	n_eq += 3;
 	n_ineq += n_spatial_intra + n_spatial_inter;
+
+	n_ineq += n_positiveness_eq;
+	n_ineq += graph->n;
+
+
 	isl_basic_set_free(graph->lp);
 	space = isl_space_set_alloc(ctx, 0, total);
 	graph->lp = isl_basic_set_alloc_space(space, 0, n_eq, n_ineq);
 	graph->lp = isl_basic_set_set_rational(graph->lp);
 
-	if (add_carry_prefix(graph, n_spatial_inter + n_spatial_intra) < 0)
+	if (add_carry_prefix(graph, n_spatial_inter + n_spatial_intra,
+			     1, 0, 2) < 0)
+		return isl_stat_error;
+
+	if (force_positive_schedule(graph) < 0)
 		return isl_stat_error;
 
 	if (add_all_constraints(ctx, graph, validity_carry->intra,
