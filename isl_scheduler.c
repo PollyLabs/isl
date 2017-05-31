@@ -4592,7 +4592,7 @@ static isl_stat setup_spatial_carry_lp(isl_ctx *ctx,
 	graph->lp = isl_basic_set_alloc_space(space, 0, n_eq, n_ineq);
 
 	if (spatial_bound != -1) {
-		if (add_groupwise_decisions(graph, 2, param_pos + 2 * nparam,
+		if (add_groupwise_decisions(graph, 2, param_pos,
 					    spatial_bound) < 0)
 			return isl_stat_error;
 		if (add_decision_variable_sums(graph, 0, 2) < 0)
