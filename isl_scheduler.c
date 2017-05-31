@@ -6361,7 +6361,7 @@ static __isl_give isl_basic_set_list *collect_inter_validity(
 	int spatial_proximity, struct isl_exploit_lineality_data *data);
 static __isl_give isl_vec *non_neg_lexmin(struct isl_sched_graph *graph,
 	__isl_take isl_basic_set *lp, int n_edge, int want_integral,
-	int non_empty);
+	int non_empty, int carry_pos);
 
 static __isl_give isl_vec *compute_spatial_carrying_sol(isl_ctx *ctx,
 	struct isl_sched_graph *graph, int use_coincidence)
@@ -6398,7 +6398,7 @@ static __isl_give isl_vec *compute_spatial_carrying_sol(isl_ctx *ctx,
 			return NULL);
 
 	sol = non_neg_lexmin(graph, isl_basic_set_copy(graph->lp),
-			     n_spatial_inter + n_spatial_intra, 1, 0);
+			     n_spatial_inter + n_spatial_intra, 1, 0, 1);
 
 	isl_carry_clear(&validity_carry);
 	isl_carry_clear(&spatial_carry);
@@ -6662,6 +6662,7 @@ static __isl_give isl_vec *non_empty_solution(__isl_keep isl_tab_lexmin *tl)
  * by the edge are carried by the solution.
  * If the sum of the (1 - e_i) is smaller than "n_edge" then at least
  * one of those is carried.
+ * "carry_pos" identifies the position of sum of the (1 - e_i) in the LP.
  *
  * Note that despite the fact that the problem is solved using a rational
  * solver, the solution is guaranteed to be integral.
@@ -6676,18 +6677,21 @@ static __isl_give isl_vec *non_empty_solution(__isl_keep isl_tab_lexmin *tl)
  *     Problem, Part II: Multi-Dimensional Time.
  *     In Intl. Journal of Parallel Programming, 1992.
  */
-static int carries_dependences(__isl_keep isl_vec *sol, int n_edge)
+static int carries_dependences(__isl_keep isl_vec *sol, int n_edge,
+			       int carry_pos)
 {
-	isl_int_divexact(sol->el[1], sol->el[1], sol->el[0]);
+	isl_int_divexact(sol->el[1 + carry_pos], sol->el[1 + carry_pos],
+			 sol->el[0]);
 	isl_int_set_si(sol->el[0], 1);
-	return isl_int_cmp_si(sol->el[1], n_edge) < 0;
+	return isl_int_cmp_si(sol->el[1 + carry_pos], n_edge) < 0;
 }
 
 /* Return the lexicographically smallest rational point in "lp",
  * assuming that all variables are non-negative and performing some
  * additional sanity checks.
  * In particular, if dependences are not carried for any of the "n_edge" edges,
- * then return an empty vector.
+ * then return an empty vector. "carry_pos" is the position of the LP variable
+ * that is used for this check.
  * If "want_integral" is set, then compute the lexicographically smallest
  * integer point instead.
  * If "non_empty" is set, "lp" should not be empty by construction.
@@ -6717,7 +6721,7 @@ static int carries_dependences(__isl_keep isl_vec *sol, int n_edge)
  */
 static __isl_give isl_vec *non_neg_lexmin(struct isl_sched_graph *graph,
 	__isl_take isl_basic_set *lp, int n_edge, int want_integral,
-	int non_empty)
+	int non_empty, int carry_pos)
 {
 	int i, pos, cut;
 	isl_ctx *ctx;
@@ -6749,7 +6753,7 @@ static __isl_give isl_vec *non_neg_lexmin(struct isl_sched_graph *graph,
 			goto error;
 
 		integral = isl_int_is_one(sol->el[0]);
-		if (!carries_dependences(sol, n_edge)) {
+		if (!carries_dependences(sol, n_edge, carry_pos)) {
 			if (!prev)
 				prev = isl_vec_alloc(ctx, 0);
 			isl_vec_free(sol);
@@ -7244,7 +7248,7 @@ static __isl_give isl_vec *compute_carrying_sol_coef(isl_ctx *ctx,
 		return NULL;
 
 	lp = isl_basic_set_copy(graph->lp);
-	return non_neg_lexmin(graph, lp, n_edge, want_integral, 1);
+	return non_neg_lexmin(graph, lp, n_edge, want_integral, 1, 0);
 }
 
 /* Construct an LP problem for finding schedule coefficients
