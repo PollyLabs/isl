@@ -7711,7 +7711,7 @@ static isl_vec *find_coincident_spatial_solution(isl_ctx *ctx,
 {
 	if (setup_spatial_carry_lp(ctx, graph, -1, 0, NULL) < 0)
 		return NULL;
-	return solve_lp(ctx, graph, 2);
+	return solve_lp(ctx, graph, 6 + 2 * graph->n_groups);
 }
 
 static isl_vec *find_coincident_spatial_constant_bound_solution(isl_ctx *ctx,
