@@ -6360,7 +6360,8 @@ static __isl_give isl_basic_set_list *collect_inter_validity(
 	struct isl_sched_graph *graph, int validity, int coincidence,
 	int spatial_proximity, struct isl_exploit_lineality_data *data);
 static __isl_give isl_vec *non_neg_lexmin(struct isl_sched_graph *graph,
-	__isl_take isl_basic_set *lp, int n_edge, int want_integral);
+	__isl_take isl_basic_set *lp, int n_edge, int want_integral,
+	int non_empty);
 
 static __isl_give isl_vec *compute_spatial_carrying_sol(isl_ctx *ctx,
 	struct isl_sched_graph *graph, int use_coincidence)
@@ -6397,7 +6398,7 @@ static __isl_give isl_vec *compute_spatial_carrying_sol(isl_ctx *ctx,
 			return NULL);
 
 	sol = non_neg_lexmin(graph, isl_basic_set_copy(graph->lp),
-			     n_spatial_inter + n_spatial_intra, 1);
+			     n_spatial_inter + n_spatial_intra, 1, 0);
 
 	isl_carry_clear(&validity_carry);
 	isl_carry_clear(&spatial_carry);
@@ -6685,12 +6686,12 @@ static int carries_dependences(__isl_keep isl_vec *sol, int n_edge)
 /* Return the lexicographically smallest rational point in "lp",
  * assuming that all variables are non-negative and performing some
  * additional sanity checks.
+ * In particular, if dependences are not carried for any of the "n_edge" edges,
+ * then return an empty vector.
  * If "want_integral" is set, then compute the lexicographically smallest
  * integer point instead.
- * In particular, "lp" should not be empty by construction.
+ * If "non_empty" is set, "lp" should not be empty by construction.
  * Double check that this is the case.
- * If dependences are not carried for any of the "n_edge" edges,
- * then return an empty vector.
  *
  * If the schedule_treat_coalescing option is set and
  * if the computed schedule performs loop coalescing on a given node,
@@ -6715,7 +6716,8 @@ static int carries_dependences(__isl_keep isl_vec *sol, int n_edge)
  * were taken.
  */
 static __isl_give isl_vec *non_neg_lexmin(struct isl_sched_graph *graph,
-	__isl_take isl_basic_set *lp, int n_edge, int want_integral)
+	__isl_take isl_basic_set *lp, int n_edge, int want_integral,
+	int non_empty)
 {
 	int i, pos, cut;
 	isl_ctx *ctx;
@@ -6735,7 +6737,14 @@ static __isl_give isl_vec *non_neg_lexmin(struct isl_sched_graph *graph,
 
 		if (cut)
 			tl = isl_tab_lexmin_cut_to_integer(tl);
-		sol = non_empty_solution(tl);
+		if (non_empty) {
+			sol = non_empty_solution(tl);
+		} else {
+			sol = isl_tab_lexmin_get_solution(tl);
+			if (sol->size == 0)
+				break;
+		}
+
 		if (!sol)
 			goto error;
 
@@ -7235,7 +7244,7 @@ static __isl_give isl_vec *compute_carrying_sol_coef(isl_ctx *ctx,
 		return NULL;
 
 	lp = isl_basic_set_copy(graph->lp);
-	return non_neg_lexmin(graph, lp, n_edge, want_integral);
+	return non_neg_lexmin(graph, lp, n_edge, want_integral, 1);
 }
 
 /* Construct an LP problem for finding schedule coefficients
