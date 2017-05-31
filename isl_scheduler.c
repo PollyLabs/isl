@@ -4492,18 +4492,18 @@ static isl_stat add_groupwise_sum_constraints(struct isl_sched_graph *graph,
 
 	for (i = 0; i < graph->n_groups; ++i) {
 		if (add_groups_sum_constraint(graph, 2 * i + start,
-				param_pos + 2 * nparam + (2 * nparam + 1) * i,
+				param_pos + 2 * nparam + (2 * nparam + 1) * i + 1,
 				2 * nparam, 2 * nparam + 1, 1) < 0)
 			return isl_stat_error;
 		if (add_groups_sum_constraint(graph, 2 * i + start + 1,
-				param_pos + 4 * nparam + (2 * nparam + 1) * i,
+				param_pos + 2 * nparam + (2 * nparam + 1) * i,
 				1, 2 * nparam + 1, 1) < 0)
 			return isl_stat_error;
 	}
-	if (add_groups_sum_constraint(graph, sum_start, param_pos + 2 * nparam,
+	if (add_groups_sum_constraint(graph, sum_start, param_pos + 2 * nparam + 1,
 			2 * nparam, 2 * nparam + 1, graph->n_groups) < 0)
 		return isl_stat_error;
-	if (add_groups_sum_constraint(graph, sum_start + 1, param_pos + 4 * nparam,
+	if (add_groups_sum_constraint(graph, sum_start + 1, param_pos + 2 * nparam,
 			1, 2 * nparam + 1, graph->n_groups) < 0)
 		return isl_stat_error;
 	return isl_stat_ok;
