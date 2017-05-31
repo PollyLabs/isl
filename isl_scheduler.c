@@ -4425,6 +4425,75 @@ static isl_stat add_groupwise_decisions(struct isl_sched_graph *graph,
 	return isl_stat_ok;
 }
 
+// Feautrier-style binary variables for carried/non-carried.
+static isl_stat add_groupwise_binary_vars(struct isl_sched_graph *graph,
+					  int first_pos, int param_pos)
+{
+	int i, j, k;
+	int nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
+	int total = isl_basic_set_dim(graph->lp, isl_dim_set);
+
+	for (i = 0; i < graph->n_groups; ++i) {
+		int pos = 1 + first_pos + 2*i + 1;
+		int cst_pos = 1 + param_pos + 2 * nparam + (2 * nparam + 1) * i;
+
+		//       e <= -m_1^- + m_1^+ - m_2^- + m_2^+ ... + m_0
+		// -->  -m_1^- + m_1^+ - m_2^- + m_2^+ ... + m_0 - e >= 0
+		k = isl_basic_set_alloc_inequality(graph->lp);
+		if (k < 0)
+			return isl_stat_error;
+		isl_seq_clr(graph->lp->ineq[k], 1 + total);
+		isl_int_set_si(graph->lp->ineq[k][pos], -1);
+		isl_int_set_si(graph->lp->ineq[k][cst_pos], 1);
+		for (j = 0; j < nparam; ++j) {
+			isl_int_set_si(graph->lp->ineq[k][cst_pos + 1 + 2*j],
+					-1);
+			isl_int_set_si(graph->lp->ineq[k][cst_pos + 2 + 2*j],
+					1);
+		}
+
+		// e >= 0
+		k = isl_basic_set_alloc_inequality(graph->lp);
+		if (k < 0)
+			return isl_stat_error;
+		isl_seq_clr(graph->lp->ineq[k], 1 + total);
+		isl_int_set_si(graph->lp->ineq[k][pos], 1);
+
+		//      e <= 1
+		// -->  1 - e >= 0
+		k = isl_basic_set_alloc_inequality(graph->lp);
+		if (k < 0)
+			return isl_stat_error;
+		isl_seq_clr(graph->lp->ineq[k], 1 + total);
+		isl_int_set_si(graph->lp->ineq[k][0], 1);
+		isl_int_set_si(graph->lp->ineq[k][pos], -1);
+	}
+
+	return isl_stat_ok;
+}
+
+static isl_stat add_negated_binary_var_sum(struct isl_sched_graph *graph,
+					   int sum_pos, int first_pos)
+{
+	int i, k;
+	int total = isl_basic_set_dim(graph->lp, isl_dim_set);
+
+	//      s = \sum_i (1 - e_i)  where i = [1,n_groups]
+	// -->  s = n_groups - \sum e_i
+	// -->  s + \sum e_i - n_groups = 0
+	k = isl_basic_set_alloc_equality(graph->lp);
+	if (k < 0)
+		return isl_stat_error;
+	isl_seq_clr(graph->lp->eq[k], 1 + total);
+	isl_int_set_si(graph->lp->eq[k][0], -graph->n_groups);
+	isl_int_set_si(graph->lp->eq[k][1 + sum_pos], 1);
+	for (i = 0; i < graph->n_groups; ++i) {
+		int pos = 1 + first_pos + 2 * i + 1;
+		isl_int_set_si(graph->lp->eq[k][pos], 1);
+	}
+	return isl_stat_ok;
+}
+
 static isl_stat add_decision_variable_sums(struct isl_sched_graph *graph,
 					   int pos, int first_var)
 {
@@ -4509,6 +4578,29 @@ static isl_stat add_groupwise_sum_constraints(struct isl_sched_graph *graph,
 	return isl_stat_ok;
 }
 
+static isl_stat force_non_parametric(struct isl_sched_graph *graph,
+				     int param_pos)
+{
+	int i, j, k, nparam, total;
+
+	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
+	total = isl_basic_set_dim(graph->lp, isl_dim_set);
+
+	for (i = 0; i < graph->n_groups; ++i) {
+		for (j = 0; j < 2 * nparam; ++j) {
+			int pos = param_pos + 2 * nparam + 1 + (2 * nparam + 1) * i + j;
+
+			k = isl_basic_set_alloc_equality(graph->lp);
+			if (k < 0)
+				return isl_stat_error;
+			isl_seq_clr(graph->lp->eq[k], 1 + total);
+			isl_int_set_si(graph->lp->eq[k][1 + pos], 1);
+		}
+	}
+	return isl_stat_ok;
+
+}
+
 #define PROFITABLE_SPATIAL_BOUND 32
 
 // if "zero_param_sum" add an additional constraint to make parameter sum 0
@@ -4575,12 +4667,18 @@ static isl_stat setup_spatial_carry_lp(isl_ctx *ctx,
 	// decision variable sums (2) OR plain sums (2)
 	n_eq += 2 + parametric + 1 + 1;
 
-	if (zero_param_sum)
+	if (zero_param_sum & spatial_bound == -1)
 		n_eq += 1;
 
 	// decision variable inequalities + (1) decision sum >= 1
+#if 0
 	if (spatial_bound != -1)
 		n_ineq += 4 * graph->n_groups + 1;
+#endif
+	if (spatial_bound != -1) {
+		n_ineq += 3 * graph->n_groups + 1;
+		n_eq += 2 * nparam * graph->n_groups;
+	}
 	// partial sums 2 * n_groups
 	else if (!fix_bounds)
 		n_eq += 2 * graph->n_groups;
@@ -4592,6 +4690,15 @@ static isl_stat setup_spatial_carry_lp(isl_ctx *ctx,
 	graph->lp = isl_basic_set_alloc_space(space, 0, n_eq, n_ineq);
 
 	if (spatial_bound != -1) {
+		if (add_var_sum_constraint(graph, 0) < 0)
+			return isl_stat_error;
+		if (add_negated_binary_var_sum(graph, 1, 2) < 0)
+			return isl_stat_error;
+		if (add_groupwise_binary_vars(graph, 2, param_pos) < 0)
+			return isl_stat_error;
+		if (force_non_parametric(graph, param_pos) < 0)
+			return isl_stat_error;
+#if 0
 		if (add_groupwise_decisions(graph, 2, param_pos,
 					    spatial_bound) < 0)
 			return isl_stat_error;
@@ -4599,6 +4706,7 @@ static isl_stat setup_spatial_carry_lp(isl_ctx *ctx,
 			return isl_stat_error;
 		if (require_one_decision_carried(graph, 1) < 0)
 			return isl_stat_error;
+#endif
 	} else if (!fix_bounds){  // use sums (instead of decisions)
 		add_groupwise_sum_constraints(graph, 0, 2, param_pos);
 	}
@@ -4608,7 +4716,7 @@ static isl_stat setup_spatial_carry_lp(isl_ctx *ctx,
 			return isl_stat_error;
 	}
 
-	if (zero_param_sum) {
+	if (zero_param_sum && spatial_bound == -1) {
 		if (require_zero_at(graph, 0) < 0)
 			return isl_stat_error;
 	}
