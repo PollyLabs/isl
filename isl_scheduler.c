@@ -8236,7 +8236,8 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 				return isl_stat_error;
 			if (sol->size == 0) {
 				memory_coalescing = 0;
-				goto handle_empty_sol;
+				carry_spatial_proximity = 0;
+//				goto handle_empty_sol;
 			} else {
 				graph->found_one_coalescing = 1;
 			}
