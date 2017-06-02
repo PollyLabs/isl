@@ -11,6 +11,9 @@
  * coincident is an array of length n, indicating whether a scheduling dimension
  *	satisfies the coincidence constraints in the sense that
  *	the corresponding dependence distances are zero.
+ * spatial is an array of length n, indicating whether a scheduling dimension
+ * 	is known to carry spatial proximity constraints;  it may still carry
+ * 	some spatial proximity constraints if the "spatial" is not set.
  * permutable is set if the band is permutable.
  * mupa is the partial schedule corresponding to this band.  The dimension
  *	of mupa is equal to n.
@@ -31,6 +34,7 @@ struct isl_schedule_band {
 
 	int n;
 	int *coincident;
+	int *spatial;
 	int permutable;
 
 	isl_multi_union_pw_aff *mupa;
@@ -91,6 +95,10 @@ isl_bool isl_schedule_band_member_get_coincident(
 	__isl_keep isl_schedule_band *band, int pos);
 __isl_give isl_schedule_band *isl_schedule_band_member_set_coincident(
 	__isl_take isl_schedule_band *band, int pos, int coincident);
+isl_bool isl_schedule_band_member_get_spatial(
+	__isl_keep isl_schedule_band *band, int pos);
+__isl_give isl_schedule_band *isl_schedule_band_member_set_spatial(
+	__isl_take isl_schedule_band *band, int pos, int spatial);
 isl_bool isl_schedule_band_get_permutable(__isl_keep isl_schedule_band *band);
 __isl_give isl_schedule_band *isl_schedule_band_set_permutable(
 	__isl_take isl_schedule_band *band, int permutable);

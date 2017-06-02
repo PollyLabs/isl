@@ -1497,6 +1497,39 @@ __isl_give isl_schedule_node *isl_schedule_node_band_member_set_coincident(
 	return node;
 }
 
+/* Is the band member at position "pos" of the band node "node"
+ * marked spatial?
+ */
+isl_bool isl_schedule_node_band_member_get_spatial(
+	__isl_keep isl_schedule_node *node, int pos)
+{
+	if (!node)
+		return isl_bool_error;
+	return isl_schedule_tree_band_member_get_spatial(node->tree, pos);
+}
+
+/* Mark the band member at position "pos" the band node "node"
+ * as being spatial or not according to "spatial".
+ */
+__isl_give isl_schedule_node *isl_schedule_node_band_member_set_spatial(
+	__isl_take isl_schedule_node *node, int pos, int spatial)
+{
+	int c;
+	isl_schedule_tree *tree;
+
+	if (!node)
+		return NULL;
+	c = isl_schedule_node_band_member_get_spatial(node, pos);
+	if (c == spatial)
+		return node;
+
+	tree = isl_schedule_tree_copy(node->tree);
+	tree = isl_schedule_tree_band_member_set_spatial(tree, pos, spatial);
+	node = isl_schedule_node_graft_tree(node, tree);
+
+	return node;
+}
+
 /* Is the band node "node" marked permutable?
  */
 isl_bool isl_schedule_node_band_get_permutable(

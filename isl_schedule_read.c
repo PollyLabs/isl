@@ -12,6 +12,7 @@ enum isl_schedule_key {
 	isl_schedule_key_error = -1,
 	isl_schedule_key_child,
 	isl_schedule_key_coincident,
+	isl_schedule_key_spatial,
 	isl_schedule_key_context,
 	isl_schedule_key_contraction,
 	isl_schedule_key_domain,
@@ -51,6 +52,8 @@ static enum isl_schedule_key extract_key(__isl_keep isl_stream *s,
 		key = isl_schedule_key_child;
 	else if (!strcmp(name, "coincident"))
 		key = isl_schedule_key_coincident;
+	else if (!strcmp(name, "spatial"))
+		key = isl_schedule_key_spatial;
 	else if (!strcmp(name, "context"))
 		key = isl_schedule_key_context;
 	else if (!strcmp(name, "contraction"))
@@ -487,10 +490,10 @@ error:
 	return NULL;
 }
 
-/* Read a sequence of integers from "s" (representing the coincident
+/* Read a sequence of integers from "s" (representing the coincident or spatial
  * property of a band node).
  */
-static __isl_give isl_val_list *read_coincident(__isl_keep isl_stream *s)
+static __isl_give isl_val_list *read_integer_sequence(__isl_keep isl_stream *s)
 {
 	isl_ctx *ctx;
 	isl_val_list *list;
@@ -541,6 +544,32 @@ static __isl_give isl_schedule_band *set_coincident(
 	return band;
 }
 
+/* Set the (initial) spatial properties of "band" according to
+ * the (initial) elements of "spatial".
+ */
+static __isl_give isl_schedule_band *set_spatial(
+	__isl_take isl_schedule_band *band, __isl_take isl_val_list *spatial)
+{
+	int i;
+	int n, m;
+
+	n = isl_schedule_band_n_member(band);
+	m = isl_val_list_n_val(spatial);
+
+	for (i = 0; i < n && i < m; ++i) {
+		isl_val *v;
+
+		v = isl_val_list_get_val(spatial, i);
+		if (!v)
+			band = isl_schedule_band_free(band);
+		band = isl_schedule_band_member_set_spatial(band, i,
+							!isl_val_is_zero(v));
+		isl_val_free(v);
+	}
+	isl_val_list_free(spatial);
+	return band;
+}
+
 /* Read a subtree with band root node from "s".
  */
 static __isl_give isl_schedule_tree *read_band(isl_stream *s)
@@ -548,6 +577,7 @@ static __isl_give isl_schedule_tree *read_band(isl_stream *s)
 	isl_multi_union_pw_aff *schedule = NULL;
 	isl_schedule_tree *tree = NULL;
 	isl_val_list *coincident = NULL;
+	isl_val_list *spatial = NULL;
 	isl_union_set *options = NULL;
 	isl_ctx *ctx;
 	isl_schedule_band *band;
@@ -583,8 +613,13 @@ static __isl_give isl_schedule_tree *read_band(isl_stream *s)
 				goto error;
 			break;
 		case isl_schedule_key_coincident:
-			coincident = read_coincident(s);
+			coincident = read_integer_sequence(s);
 			if (!coincident)
+				goto error;
+			break;
+		case isl_schedule_key_spatial:
+			spatial = read_integer_sequence(s);
+			if (!spatial)
 				goto error;
 			break;
 		case isl_schedule_key_permutable:
@@ -624,6 +659,8 @@ static __isl_give isl_schedule_tree *read_band(isl_stream *s)
 	band = isl_schedule_band_set_permutable(band, permutable);
 	if (coincident)
 		band = set_coincident(band, coincident);
+	if (spatial)
+		band = set_spatial(band, spatial);
 	if (options)
 		band = isl_schedule_band_set_ast_build_options(band, options);
 	if (tree)
@@ -634,6 +671,7 @@ static __isl_give isl_schedule_tree *read_band(isl_stream *s)
 	return tree;
 error:
 	isl_val_list_free(coincident);
+	isl_val_list_free(spatial);
 	isl_union_set_free(options);
 	isl_schedule_tree_free(tree);
 	isl_multi_union_pw_aff_free(schedule);
@@ -752,6 +790,7 @@ static __isl_give isl_schedule_tree *isl_stream_read_schedule_tree(
 		break;
 	case isl_schedule_key_schedule:
 	case isl_schedule_key_coincident:
+	case isl_schedule_key_spatial:
 	case isl_schedule_key_options:
 	case isl_schedule_key_permutable:
 		tree = read_band(s);

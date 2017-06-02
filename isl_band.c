@@ -56,11 +56,14 @@ __isl_give isl_band *isl_band_dup(__isl_keep isl_band *band)
 
 	dup->n = band->n;
 	dup->coincident = isl_alloc_array(ctx, int, band->n);
-	if (band->n && !dup->coincident)
+	dup->spatial = isl_calloc_array(ctx, int, band->n);
+	if (band->n && (!dup->coincident || !dup->spatial))
 		goto error;
 
-	for (i = 0; i < band->n; ++i)
+	for (i = 0; i < band->n; ++i) {
 		dup->coincident[i] = band->coincident[i];
+		dup->spatial[i] = band->spatial[i];
+	}
 
 	dup->pma = isl_union_pw_multi_aff_copy(band->pma);
 	dup->schedule = band->schedule;
@@ -109,6 +112,7 @@ __isl_null isl_band *isl_band_free(__isl_take isl_band *band)
 	isl_union_pw_multi_aff_free(band->pma);
 	isl_band_list_free(band->children);
 	free(band->coincident);
+	free(band->spatial);
 	free(band);
 
 	return NULL;
@@ -151,6 +155,21 @@ int isl_band_member_is_coincident(__isl_keep isl_band *band, int pos)
 			"invalid member position", return -1);
 
 	return band->coincident[pos];
+}
+
+/* Is the given scheduling dimension spatial within the band and
+ * with respect to the coincidence constraints.
+ */
+int isl_band_member_is_spatial(__isl_keep isl_band *band, int pos)
+{
+	if (!band)
+		return -1;
+
+	if (pos < 0 || pos >= band->n)
+		isl_die(isl_band_get_ctx(band), isl_error_invalid,
+			"invalid member position", return -1);
+
+	return band->spatial[pos];
 }
 
 /* Return the schedule that leads up to this band.
@@ -656,8 +675,10 @@ static int isl_band_drop(__isl_keep isl_band *band, int pos, int n)
 	isl_union_pw_multi_aff_free(band->pma);
 	band->pma = sched;
 
-	for (i = pos + n; i < band->n; ++i)
+	for (i = pos + n; i < band->n; ++i) {
 		band->coincident[i - n] = band->coincident[i];
+		band->spatial[i - n] = band->spatial[i];
+	}
 
 	band->n -= n;
 

@@ -122,6 +122,12 @@ isl_bool isl_schedule_node_band_member_get_coincident(
 __isl_export
 __isl_give isl_schedule_node *isl_schedule_node_band_member_set_coincident(
 	__isl_take isl_schedule_node *node, int pos, int coincident);
+__isl_export
+isl_bool isl_schedule_node_band_member_get_spatial(
+	__isl_keep isl_schedule_node *node, int pos);
+__isl_export
+__isl_give isl_schedule_node *isl_schedule_node_band_member_set_spatial(
+	__isl_take isl_schedule_node *node, int pos, int spatial);
 isl_bool isl_schedule_node_band_get_permutable(
 	__isl_keep isl_schedule_node *node);
 __isl_give isl_schedule_node *isl_schedule_node_band_set_permutable(

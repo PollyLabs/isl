@@ -62,12 +62,14 @@ __isl_give isl_schedule_band *isl_schedule_band_from_multi_union_pw_aff(
 
 	band->n = isl_multi_union_pw_aff_dim(mupa, isl_dim_set);
 	band->coincident = isl_calloc_array(ctx, int, band->n);
+	band->spatial = isl_calloc_array(ctx, int, band->n);
 	band->mupa = mupa;
 	space = isl_space_params_alloc(ctx, 0);
 	band->ast_build_options = isl_union_set_empty(space);
 	band->anchored = 0;
 
-	if ((band->n && !band->coincident) || !band->ast_build_options)
+	if ((band->n && !band->coincident) || !band->ast_build_options ||
+	    (band->n && !band->spatial))
 		return isl_schedule_band_free(band);
 
 	return band;
@@ -98,8 +100,14 @@ __isl_give isl_schedule_band *isl_schedule_band_dup(
 	if (band->n && !dup->coincident)
 		return isl_schedule_band_free(dup);
 
-	for (i = 0; i < band->n; ++i)
+	dup->spatial = isl_calloc_array(ctx, int, band->n);
+	if (band->n && !dup->spatial)
+		return isl_schedule_band_free(dup);
+
+	for (i = 0; i < band->n; ++i) {
 		dup->coincident[i] = band->coincident[i];
+		dup->spatial[i] = band->spatial[i];
+	}
 	dup->permutable = band->permutable;
 
 	dup->mupa = isl_multi_union_pw_aff_copy(band->mupa);
@@ -170,6 +178,7 @@ __isl_null isl_schedule_band *isl_schedule_band_free(
 	free(band->loop_type);
 	free(band->isolate_loop_type);
 	free(band->coincident);
+	free(band->spatial);
 	free(band);
 
 	return NULL;
@@ -190,9 +199,12 @@ isl_bool isl_schedule_band_plain_is_equal(__isl_keep isl_schedule_band *band1,
 
 	if (band1->n != band2->n)
 		return isl_bool_false;
-	for (i = 0; i < band1->n; ++i)
+	for (i = 0; i < band1->n; ++i) {
 		if (band1->coincident[i] != band2->coincident[i])
 			return isl_bool_false;
+		if (band1->spatial[i] != band2->spatial[i])
+			return isl_bool_false;
+	}
 	if (band1->permutable != band2->permutable)
 		return isl_bool_false;
 
@@ -266,6 +278,45 @@ __isl_give isl_schedule_band *isl_schedule_band_member_set_coincident(
 	return band;
 }
 
+/* Is the given scheduling dimension known to be spatial within the band?
+ */
+isl_bool isl_schedule_band_member_get_spatial(
+	__isl_keep isl_schedule_band *band, int pos)
+{
+	if (!band)
+		return isl_bool_error;
+
+	if (pos < 0 || pos >= band->n)
+		isl_die(isl_schedule_band_get_ctx(band), isl_error_invalid,
+			"invalid member position", return isl_bool_error);
+
+	return band->spatial[pos];
+}
+
+/* Mark the given scheduling dimension as being spatial or not
+ * according to "spatial".
+ */
+__isl_give isl_schedule_band *isl_schedule_band_member_set_spatial(
+	__isl_take isl_schedule_band *band, int pos, int spatial)
+{
+	if (!band)
+		return NULL;
+	if (isl_schedule_band_member_get_spatial(band, pos) == spatial)
+		return band;
+	band = isl_schedule_band_cow(band);
+	if (!band)
+		return NULL;
+
+	if (pos < 0 || pos >= band->n)
+		isl_die(isl_schedule_band_get_ctx(band), isl_error_invalid,
+			"invalid member position",
+			return isl_schedule_band_free(band));
+
+	band->spatial[pos] = spatial;
+
+	return band;
+}
+
 /* Is the schedule band mark permutable?
  */
 isl_bool isl_schedule_band_get_permutable(__isl_keep isl_schedule_band *band)
@@ -309,6 +360,7 @@ __isl_give isl_schedule_band *isl_schedule_band_permute(
 	isl_union_set *schedule_uset;
 	isl_set *schedule_set;
 	int *permuted_coincidence;
+	int *permuted_spatial;
 	enum isl_ast_loop_type *permuted_loop_type;
 	enum isl_ast_loop_type *permuted_isolate_loop_type;
 
@@ -347,12 +399,17 @@ __isl_give isl_schedule_band *isl_schedule_band_permute(
 		goto error;
 
 	permuted_coincidence = isl_calloc_array(ctx, int, band->n);
-	if (!permuted_coincidence)
+	permuted_spatial = isl_calloc_array(ctx, int, band->n);
+	if (!permuted_coincidence || !permuted_spatial)
 		goto error;
-	for (i = 0; i < band->n; ++i)
+	for (i = 0; i < band->n; ++i) {
 		permuted_coincidence[order[i]] = band->coincident[i];
+		permuted_spatial[order[i]] = band->spatial[i];
+	}
 	free(band->coincident);
+	free(band->spatial);
 	band->coincident = permuted_coincidence;
+	band->spatial = permuted_spatial;
 
 	if (band->loop_type) {
 		permuted_loop_type = isl_calloc_array(ctx,
@@ -1283,8 +1340,10 @@ __isl_give isl_schedule_band *isl_schedule_band_drop(
 	if (!band->mupa)
 		return isl_schedule_band_free(band);
 
-	for (i = pos + n; i < band->n; ++i)
+	for (i = pos + n; i < band->n; ++i) {
 		band->coincident[i - n] = band->coincident[i];
+		band->spatial[i - n] = band->spatial[i];
+	}
 	if (band->loop_type)
 		for (i = pos + n; i < band->n; ++i)
 			band->loop_type[i - n] = band->loop_type[i];

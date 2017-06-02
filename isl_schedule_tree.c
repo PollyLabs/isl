@@ -1046,6 +1046,46 @@ __isl_give isl_schedule_tree *isl_schedule_tree_band_member_set_coincident(
 	return tree;
 }
 
+/* Is the band member at position "pos" of the band tree root
+ * marked spatial?
+ */
+isl_bool isl_schedule_tree_band_member_get_spatial(
+	__isl_keep isl_schedule_tree *tree, int pos)
+{
+	if (!tree)
+		return isl_bool_error;
+
+	if (tree->type != isl_schedule_node_band)
+		isl_die(isl_schedule_tree_get_ctx(tree), isl_error_invalid,
+			"not a band node", return isl_bool_error);
+
+	return isl_schedule_band_member_get_spatial(tree->band, pos);
+}
+
+/* Mark the given band member as being spatial or not
+ * according to "spatial".
+ */
+__isl_give isl_schedule_tree *isl_schedule_tree_band_member_set_spatial(
+	__isl_take isl_schedule_tree *tree, int pos, int spatial)
+{
+	if (!tree)
+		return NULL;
+	if (tree->type != isl_schedule_node_band)
+		isl_die(isl_schedule_tree_get_ctx(tree), isl_error_invalid,
+			"not a band node", return isl_schedule_tree_free(tree));
+	if (isl_schedule_tree_band_member_get_spatial(tree, pos) == spatial)
+		return tree;
+	tree = isl_schedule_tree_cow(tree);
+	if (!tree)
+		return NULL;
+
+	tree->band = isl_schedule_band_member_set_spatial(tree->band, pos,
+							  spatial);
+	if (!tree->band)
+		return isl_schedule_tree_free(tree);
+	return tree;
+}
+
 /* Is the band tree root marked permutable?
  */
 isl_bool isl_schedule_tree_band_get_permutable(
@@ -2644,6 +2684,20 @@ static int any_coincident(__isl_keep isl_schedule_band *band)
 	return 0;
 }
 
+/* Are any members in "band" marked spatial?
+ */
+static int any_spatial(__isl_keep isl_schedule_band *band)
+{
+	int i, n;
+
+	n = isl_schedule_band_n_member(band);
+	for (i = 0; i < n; ++i)
+		if (isl_schedule_band_member_get_spatial(band, i))
+			return 1;
+
+	return 0;
+}
+
 /* Print the band node "band" to "p".
  *
  * The permutable and coincident properties are only printed if they
@@ -2681,6 +2735,25 @@ static __isl_give isl_printer *print_tree_band(__isl_take isl_printer *p,
 		for (i = 0; i < n; ++i) {
 			p = isl_printer_print_int(p,
 			    isl_schedule_band_member_get_coincident(band, i));
+			p = isl_printer_yaml_next(p);
+		}
+		p = isl_printer_yaml_end_sequence(p);
+		p = isl_printer_set_yaml_style(p, style);
+	}
+	if (any_spatial(band)) {
+		int i, n;
+		int style;
+
+		p = isl_printer_yaml_next(p);
+		p = isl_printer_print_str(p, "spatial");
+		p = isl_printer_yaml_next(p);
+		style = isl_printer_get_yaml_style(p);
+		p = isl_printer_set_yaml_style(p, ISL_YAML_STYLE_FLOW);
+		p = isl_printer_yaml_start_sequence(p);
+		n = isl_schedule_band_n_member(band);
+		for (i = 0; i < n; ++i) {
+			p = isl_printer_print_int(p,
+			    isl_schedule_band_member_get_spatial(band, i));
 			p = isl_printer_yaml_next(p);
 		}
 		p = isl_printer_yaml_end_sequence(p);

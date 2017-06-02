@@ -27,6 +27,7 @@ struct isl_band {
 
 	int n;
 	int *coincident;
+	int *spatial;
 
 	isl_union_pw_multi_aff *pma;
 	isl_schedule *schedule;

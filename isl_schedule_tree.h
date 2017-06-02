@@ -184,6 +184,10 @@ isl_bool isl_schedule_tree_band_member_get_coincident(
 	__isl_keep isl_schedule_tree *tree, int pos);
 __isl_give isl_schedule_tree *isl_schedule_tree_band_member_set_coincident(
 	__isl_take isl_schedule_tree *tree, int pos, int coincident);
+isl_bool isl_schedule_tree_band_member_get_spatial(
+	__isl_keep isl_schedule_tree *tree, int pos);
+__isl_give isl_schedule_tree *isl_schedule_tree_band_member_set_spatial(
+	__isl_take isl_schedule_tree *tree, int pos, int spatial);
 isl_bool isl_schedule_tree_band_get_permutable(
 	__isl_keep isl_schedule_tree *tree);
 __isl_give isl_schedule_tree *isl_schedule_tree_band_set_permutable(
