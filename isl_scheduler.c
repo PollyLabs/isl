@@ -8241,25 +8241,6 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 			} else {
 				graph->found_one_coalescing = 1;
 			}
-
-			sol = find_coincident_spatial_solution(ctx, graph);
-			if (!sol)
-				return isl_stat_error;
-			if (sol->size == 0)
-				goto handle_empty_sol;
-
-			sol = find_coincident_spatial_constant_bound_solution(
-				ctx, graph, sol);
-			if (!sol)
-				return isl_stat_error;
-
-			if (sol->size == 0) {
-				memory_coalescing = 0;
-				carry_spatial_proximity = 0;
-			} else {
-				graph->found_one_coalescing = 1;
-			}
-			// what if it cannot find something in the first parallel dim?  do we keep looking in the next dim?  why wouldn't it be able to find something in the first and would in the second, they are permutable?  so stop looking in this band...
 		}
 
 		if (!carry_spatial_proximity) {
