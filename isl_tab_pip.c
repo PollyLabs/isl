@@ -5161,8 +5161,6 @@ static int force_better_solution(struct isl_tab *tab,
 		return n_op;
 	}
 
-	fprintf(stderr, "[isl_tab] forcing better solution on %d\n", i);
-
 	ctx = isl_vec_get_ctx(sol);
 	v = isl_vec_alloc(ctx, 1 + tab->n_var);
 	if (!v)
