@@ -533,6 +533,12 @@ const char *isl_basic_map_get_tuple_name(__isl_keep isl_basic_map *bmap,
 	return bmap ? isl_space_get_tuple_name(bmap->dim, type) : NULL;
 }
 
+__isl_give isl_id *isl_basic_map_get_tuple_id(__isl_keep isl_basic_map *bmap,
+	enum isl_dim_type type)
+{
+	return bmap ? isl_space_get_tuple_id(bmap->dim, type) : NULL;
+}
+
 __isl_give isl_map *isl_map_set_tuple_name(__isl_take isl_map *map,
 	enum isl_dim_type type, const char *s)
 {
