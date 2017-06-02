@@ -4145,7 +4145,7 @@ static isl_stat graph_sort_id_list(struct isl_sched_graph *graph)
   *		- positive and negative parts of c_i_x
   */
 static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
-	int use_coincidence)
+	int use_coincidence, int use_spatial_proximity)
 {
 	int i;
 	unsigned nparam;
@@ -4159,8 +4159,7 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	parametric = ctx->opt->schedule_parametric;
 	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
-	spatial_locality = has_any_spatial_proximity(graph) &&
-		graph->n_row != graph->maxvar - 1;
+	spatial_locality = use_spatial_proximity;
 
 	if (!graph->id_list)
 		return isl_stat_error;
@@ -8010,17 +8009,18 @@ cleanup:
 
 static isl_stat minimize_proximity(isl_ctx *ctx,
 	struct isl_sched_graph *graph, int use_coincidence,
-	int has_spatial_proximity, isl_vec **psol)
+	int use_spatial_proximity, isl_vec **psol)
 {
 	isl_bool carries_spatial;
 	isl_vec *sol = *psol;
 	int n_op = 2;
 
-	if (has_spatial_proximity)
+	if (use_spatial_proximity)
 		n_op = graph->id_list->n * 2 + 2;
 
 	do {
-		if (setup_lp(ctx, graph, use_coincidence) < 0)
+		if (setup_lp(ctx, graph, use_coincidence,
+			     use_spatial_proximity) < 0)
 			return isl_stat_error;
 		isl_vec_free(sol);
 		sol = solve_lp(ctx, graph, n_op);
@@ -8028,9 +8028,7 @@ static isl_stat minimize_proximity(isl_ctx *ctx,
 			return isl_stat_error;
 		if (sol->size == 0)
 			break;
-		if (!has_spatial_proximity)
-			break;
-		if (graph->n_row == graph->maxvar - 1)
+		if (!use_spatial_proximity)
 			break;
 
 		carries_spatial =
@@ -8259,9 +8257,12 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 		}
 
 		if (!carry_spatial_proximity) {
+			int use_spatial_proximity = has_spatial_proximity &&
+				!graph->found_one_coalescing &&
+				graph->n_row != graph->maxvar - 1;
 			sol = isl_vec_free(sol);
 			if (minimize_proximity(ctx, graph, use_coincidence,
-					       has_spatial_proximity, &sol) < 0)
+					       use_spatial_proximity, &sol) < 0)
 				return isl_stat_error;
 		}
 
