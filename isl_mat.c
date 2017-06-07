@@ -1731,24 +1731,34 @@ __isl_give isl_mat *isl_mat_linear_independent_complete(__isl_take isl_mat *mat,
 	return mat;
 }
 
-__isl_give isl_mat *isl_mat_linear_independent_fullrank(__isl_take isl_mat *mat)
+// considers only a submatrix with n_col
+__isl_give isl_mat *isl_mat_linear_independent_fullrank(__isl_take isl_mat *mat,
+							int n_col)
 {
 	int col, row;
 	int n_copy_row, n_row;
 	isl_mat *H;
 	int *linearly_independent;
 	isl_ctx *ctx = isl_mat_get_ctx(mat);
-	isl_mat *copy = isl_mat_copy(mat);
+	isl_mat *copy;
+
+	copy = isl_mat_sub_alloc(mat, 0, mat->n_row, 0, n_col);
+	copy = isl_mat_cow(copy);
+
+	if (isl_mat_rank(copy) == n_col) {
+		isl_mat_free(copy);
+		return mat;
+	}
 
 	linearly_independent = isl_calloc_array(ctx, int, mat->n_row);
 
-	H = isl_mat_left_hermite(isl_mat_copy(mat), 0, NULL, NULL);
+	H = isl_mat_left_hermite(isl_mat_dup(copy), 0, NULL, NULL);
 	for (col = 0; col < H->n_col; ++col) {
 		for (row = 0; row < H->n_row; ++row) {
 			if (!isl_int_is_zero(H->row[row][col]))
 				break;
 		}
-		if (row == n_copy_row) {
+		if (row == H->n_row) {
 			break;
 		} else {
 			linearly_independent[row] = 1;
@@ -1756,20 +1766,20 @@ __isl_give isl_mat *isl_mat_linear_independent_fullrank(__isl_take isl_mat *mat)
 	}
 	isl_mat_free(H);
 
-	for (row = copy->n_row; row >= 0; --row) {
+	for (row = copy->n_row - 1; row >= 0; --row) {
 		if (linearly_independent[row])
 			continue;
 		copy = isl_mat_drop_rows(copy, row, 1);
 	}
+	free(linearly_independent);
 
-	isl_mat_dump(mat);
 	n_row = mat->n_row;
 	n_copy_row = copy->n_row;
 	copy = isl_mat_linear_independent_complete(copy, copy->n_col);
 	mat = isl_mat_add_rows(mat, copy->n_row - n_copy_row);
 	for (row = 0; row < copy->n_row - n_copy_row; ++row) {
 		isl_seq_cpy(mat->row[n_row + row],
-			    copy->row[n_copy_row + row], mat->n_col);
+			    copy->row[n_copy_row + row], copy->n_col);
 	}
 	isl_mat_free(copy);
 
