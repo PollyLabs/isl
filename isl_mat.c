@@ -1776,7 +1776,7 @@ __isl_give isl_mat *isl_mat_linear_independent_fullrank(__isl_take isl_mat *mat,
 	n_row = mat->n_row;
 	n_copy_row = copy->n_row;
 	copy = isl_mat_linear_independent_complete(copy, copy->n_col);
-	mat = isl_mat_add_rows(mat, copy->n_row - n_copy_row);
+	mat = isl_mat_add_zero_rows(mat, copy->n_row - n_copy_row);
 	for (row = 0; row < copy->n_row - n_copy_row; ++row) {
 		isl_seq_cpy(mat->row[n_row + row],
 			    copy->row[n_copy_row + row], copy->n_col);
