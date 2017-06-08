@@ -3642,10 +3642,10 @@ static isl_stat add_arraywise_sum_constraints(
 	if (!graph->id_list)
 		return isl_stat_ok;
 
-	if (spatial_locality)
-		n = graph->id_list->n;
-	else
-		n = 1;
+	if (!spatial_locality)
+		return isl_stat_ok;
+
+	n = graph->id_list->n;
 
 	nparam = isl_space_dim(graph->node[0].space, isl_dim_param);
 	param_pos = 2 * n + 4;
@@ -4167,7 +4167,7 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 	if (spatial_locality) {
 		n_ids = graph->id_list->n;
 	} else {
-		n_ids = 1;
+		n_ids = 0;
 	}
 	// 2*n_ids arraywise sums, schedule-varsum, schedule-paramsum, 2 proximity sums
 	param_pos = 2 * n_ids + 2 + 2;
