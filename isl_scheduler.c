@@ -4207,6 +4207,10 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	graph->lp = isl_basic_set_alloc_space(space, 0, n_eq, n_ineq);
 
+	if (add_sum_constraint(graph, param_pos - 4,
+			       param_pos, 2 * nparam) < 0)
+		return isl_stat_error;
+
 	// if (spatial_locality)
 		if (add_arraywise_sum_constraints(graph, spatial_locality) < 0)
 			return isl_stat_error;
