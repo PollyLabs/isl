@@ -8300,6 +8300,9 @@ static isl_stat compute_schedule_wcc_band(isl_ctx *ctx,
 		// ^ if coincidence was disabled, than do not carry
 		// if no coincidence is present -- everything is coincident, so use it
 		// without enforcing
+		carry_spatial_proximity = carry_spatial_proximity ||
+			(has_spatial_proximity &&
+			 graph->n_row == graph->maxvar - 1);
 
 		if (carry_spatial_proximity) {
 			sol = compute_spatial_carrying_sol(ctx, graph,
