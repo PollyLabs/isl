@@ -2919,7 +2919,7 @@ static isl_stat add_spatial_proximity_constraints_single(
 	} else {
 		idpos1 = id_list_index_of(graph->id_list, id1);
 		idpos2 = id_list_index_of(graph->id_list, id2);
-		if (start1 < 0 || start2 < 0)
+		if (idpos1 < 0 || idpos2 < 0)
 			return isl_stat_error;
 
 		start1 = (4 * n_arrays + 2) + idpos1 * (4 * nparam)
