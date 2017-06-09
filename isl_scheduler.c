@@ -8000,7 +8000,7 @@ static isl_bool remove_first_carrying_spatial_proximity_edges(
 		    (cst_bound != -1 && isl_int_gt(sol->el[cst_index], cbound)))
 			break;
 	}
-	if (i >= length) {
+	if (i >= 2 * length) {
 		r = isl_bool_false;
 		goto cleanup;
 	}
@@ -8088,8 +8088,8 @@ static isl_stat minimize_proximity(isl_ctx *ctx,
 			return isl_stat_error;
 		if (sol->size == 0)
 			break;
-		if (!use_spatial_proximity)
-			break;
+//		if (!use_spatial_proximity)
+//			break;
 
 		carries_spatial =
 			remove_first_carrying_spatial_proximity_edges(
