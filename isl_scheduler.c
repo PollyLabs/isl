@@ -3135,6 +3135,30 @@ static int add_all_proximity_constraints(struct isl_sched_graph *graph,
 	return 0;
 }
 
+static int add_all_local_as_proximity(struct isl_sched_graph *graph,
+				      int use_coincidence, int pos, int start)
+{
+	int i;
+
+	for (i = 0; i < graph->n_edge; ++i) {
+		struct isl_sched_edge *edge = &graph->edge[i];
+		int zero = force_zero(edge, use_coincidence);
+		if (!zero)
+			continue;
+
+		if (edge->src == edge->dst) {
+			if (add_intra_proximity_constraints(
+				    graph, edge, 1, 1, pos, start) < 0)
+				return -1;
+		} else {
+			if (add_inter_proximity_constraints(
+				    graph, edge, 1, 1, pos, start) < 0)
+				return -1;
+		}
+	}
+	return 0;
+}
+
 /* Normalize the rows of "indep" such that all rows are lexicographically
  * positive and such that each row contains as many final zeros as possible,
  * given the choice for the previous rows.
@@ -3399,6 +3423,8 @@ static isl_stat add_spatial_proximity_constraints(isl_ctx *ctx,
 		if (!(spatial && is_spatial_proximity(edge)) &&
 		    !(!spatial && is_proximity(edge)) && !local)
 			continue;
+
+		local = 0;
 
 		if (edge->src == edge->dst) {
 			add_intra_spatial_proximity_constraints(
@@ -4276,6 +4302,9 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 		return isl_stat_error;
 	if (spatial_locality && add_spatial_proximity_constraints(ctx, graph,
 					use_coincidence, 0, 1) < 0)
+		return isl_stat_error;
+
+	if (add_all_local_as_proximity(graph, use_coincidence, -1, -1) < 0)
 		return isl_stat_error;
 
 	if (add_all_validity_constraints(graph, use_coincidence) < 0)
