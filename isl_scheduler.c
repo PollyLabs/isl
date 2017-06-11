@@ -2860,6 +2860,139 @@ static int id_list_index_of(struct isl_id_list *list, isl_id *id)
 	return -1;
 }
 
+static isl_bool constraint_has_only_zero_coefficients(
+	__isl_keep isl_constraint *constraint, enum isl_dim_type type)
+{
+	int i;
+	int n = isl_constraint_dim(constraint, type);
+	isl_bool b;
+
+	for (i = 0; i < n; ++i) {
+		isl_val *v = isl_constraint_get_coefficient_val(constraint,
+								type, i);
+		b = isl_val_is_zero(v);
+		isl_val_free(v);
+		if (b != isl_bool_true)
+			return b;
+	}
+
+	return isl_bool_true;
+}
+
+static isl_bool basic_map_is_uniform(__isl_keep isl_basic_map *bmap)
+{
+	isl_constraint *constraint;
+	int n_in, n_out, i, n_min, n_max;
+	isl_bool eq = isl_bool_error;
+	int has_one_stride = 0;
+
+	n_in = isl_basic_map_n_in(bmap);
+	n_out = isl_basic_map_n_out(bmap);
+
+	// if (n_out != n_in)
+	// 	return isl_bool_false;
+
+	// if (n_in > n_out)
+		// return isl_bool_false; // FIXME: dropping the case (i,j,k)->C[i,j] => (i,j)->C[i,j]
+
+	// what about the case (i,j)->C[i,0] => (i,j)->C[i,0]; constant and paramteric-only accesses seem to be managed already (coef for the variable partial is zero)
+
+	// what about (i,j)->C[i,j,j] => (i,j,k)->C[i,j,k]?
+	// dep: i'=i, j'=j, k'=j;  does not suffice to check min(n_in, n_out dimensions)
+	// check the remaining deps to be constant/parametric only?
+	// (i,j)->C[i,j,N] -> (i,j,k)->C[i,j,k]:
+	// dep = i'=i, j'=j, k'=N
+
+	// if (n_out > n_in) // case (i,j)->C[i,j] => (i,j,k)->C[i,j]
+
+	n_min = n_in < n_out ? n_in : n_out;
+	n_max = n_in > n_out ? n_in : n_out;
+
+	for (i = 0; i < n_max; ++i) {
+		isl_val *vin, *vout, *vcst;
+		isl_bool b;
+
+		if (i < n_min) {
+			if ((eq = isl_basic_map_has_defining_equality(bmap, isl_dim_out,
+					i, &constraint)) != isl_bool_true)
+				return eq;
+
+			vin = isl_constraint_get_coefficient_val(constraint,
+				isl_dim_in, i);
+			vout = isl_constraint_get_coefficient_val(constraint,
+				isl_dim_out, i);
+
+			vout = isl_val_neg(vout);
+			eq = isl_val_eq(vin, vout);
+			isl_val_free(vin);
+			isl_val_free(vout);
+			if (eq != isl_bool_true)
+				goto notfound;
+
+			vcst = isl_constraint_get_constant_val(constraint);
+			b = isl_val_is_zero(vcst);
+			isl_val_free(vcst);
+			if (b == isl_bool_error) {
+				eq = isl_bool_error;
+				goto notfound;
+			}
+			if (!b) {
+				if (has_one_stride) {
+					eq = isl_bool_false;
+					goto notfound;
+				} else {
+					has_one_stride = 1;
+				}
+			}
+
+			constraint = isl_constraint_set_coefficient_si(constraint,
+				isl_dim_in, i, 0);
+			constraint = isl_constraint_set_coefficient_si(constraint,
+				isl_dim_out, i, 0);
+		} else {
+			enum isl_dim_type type = n_in > n_out ? isl_dim_in : isl_dim_out;
+
+			eq = isl_basic_map_has_defining_equality(bmap, type,
+				i, &constraint);
+			if (eq == isl_bool_error)
+				return eq;
+			if (!eq)
+				continue;  // This allows (i,j)->C[i,j] => (i,j,k)->C[i,j] for address-based (non-dataflow) analysis where dep. i'=i, j'=j, lb_k<=k<=ub_k.
+						// FIXME: but shoud we account for dependences that have old "cache style", i.e. 32*i <= i' <= 32*i+31 ??  they won't fit current conditions, but may be useful (even if they are not uniform...)
+		}
+
+		eq = constraint_has_only_zero_coefficients(constraint,
+							   isl_dim_in);
+		if (eq != isl_bool_true)
+			goto notfound;
+
+		eq = constraint_has_only_zero_coefficients(constraint,
+							   isl_dim_out);
+		if (eq != isl_bool_true)
+			goto notfound;
+
+		isl_constraint_free(constraint);
+	}
+
+	return isl_bool_true;
+
+notfound:
+	isl_constraint_free(constraint);
+	return eq;
+}
+
+static isl_bool map_is_uniform(__isl_keep isl_map *map)
+{
+	int i;
+
+	for (i = 0; i < map->n; ++i) {
+		isl_bool r = basic_map_is_uniform(map->p[i]);
+		if (r != isl_bool_true)
+			return r;
+	}
+	return isl_bool_true;
+}
+
 struct add_spatial_proximity_data {
 	struct isl_sched_graph *graph;
 	struct isl_sched_edge *edge;
@@ -2886,6 +3019,11 @@ static isl_stat add_spatial_proximity_constraints_single(
 	unsigned nparam = isl_map_dim(map, isl_dim_param);
 	isl_ctx *ctx = isl_map_get_ctx(map);
 	int spatial = data->spatial;
+
+	if (map_is_uniform(map) != isl_bool_true) {
+		isl_map_free(map);
+		return isl_stat_ok;
+	}
 
 	if (!graph->id_list)
 		return isl_stat_error;
