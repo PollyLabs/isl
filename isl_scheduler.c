@@ -2940,8 +2940,13 @@ static isl_bool basic_map_is_uniform(__isl_keep isl_basic_map *bmap)
 			if (eq == isl_bool_error)
 				return eq;
 			if (!eq)
-				continue;  // This allows (i,j)->C[i,j] => (i,j,k)->C[i,j] for address-based (non-dataflow) analysis where dep. i'=i, j'=j, lb_k<=k<=ub_k.
-						// FIXME: but shoud we account for dependences that have old "cache style", i.e. 32*i <= i' <= 32*i+31 ??  they won't fit current conditions, but may be useful (even if they are not uniform...)
+				continue;
+			// This allows (i,j)->C[i,j] => (i,j,k)->C[i,j] for address-based (non-dataflow) analysis where dep. i'=i, j'=j, lb_k<=k<=ub_k.
+			// which may be bad
+			// FIXME: but shoud we account for dependences that have old "cache style", i.e. 32*i <= i' <= 32*i+31 ??  they won't fit current conditions, but may be useful (even if they are not uniform...)
+
+			constraint = isl_constraint_set_coefficient_si(
+				constraint, type, i, 0);
 		}
 
 		eq = constraint_has_only_zero_coefficients(constraint,
