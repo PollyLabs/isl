@@ -2884,7 +2884,6 @@ static isl_bool basic_map_is_uniform(__isl_keep isl_basic_map *bmap)
 	isl_constraint *constraint;
 	int n_in, n_out, i, n_min, n_max;
 	isl_bool eq = isl_bool_error;
-	int has_one_stride = 0;
 
 	n_in = isl_basic_map_n_in(bmap);
 	n_out = isl_basic_map_n_out(bmap);
@@ -2909,7 +2908,7 @@ static isl_bool basic_map_is_uniform(__isl_keep isl_basic_map *bmap)
 	n_max = n_in > n_out ? n_in : n_out;
 
 	for (i = 0; i < n_max; ++i) {
-		isl_val *vin, *vout, *vcst;
+		isl_val *vin, *vout;
 		isl_bool b;
 
 		if (i < n_min) {
@@ -2928,22 +2927,6 @@ static isl_bool basic_map_is_uniform(__isl_keep isl_basic_map *bmap)
 			isl_val_free(vout);
 			if (eq != isl_bool_true)
 				goto notfound;
-
-			vcst = isl_constraint_get_constant_val(constraint);
-			b = isl_val_is_zero(vcst);
-			isl_val_free(vcst);
-			if (b == isl_bool_error) {
-				eq = isl_bool_error;
-				goto notfound;
-			}
-			if (!b) {
-				if (has_one_stride) {
-					eq = isl_bool_false;
-					goto notfound;
-				} else {
-					has_one_stride = 1;
-				}
-			}
 
 			constraint = isl_constraint_set_coefficient_si(constraint,
 				isl_dim_in, i, 0);
