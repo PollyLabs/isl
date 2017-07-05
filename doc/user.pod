@@ -7832,7 +7832,7 @@ where C<cond> is zero.
 
 Lists are defined over several element types, including
 C<isl_val>, C<isl_id>, C<isl_space>,
-C<isl_pw_aff>, C<isl_pw_multi_aff>,
+C<isl_aff>, C<isl_multi_aff>, C<isl_pw_aff>, C<isl_union_pw_aff>,
 C<isl_union_pw_aff>,
 C<isl_union_pw_multi_aff>,
 C<isl_pw_qpolynomial>, C<isl_pw_qpolynomial_fold>,

@@ -28,6 +28,8 @@ struct __isl_subclass(isl_multi_pw_aff) __isl_subclass(isl_pw_multi_aff)
 	isl_multi_aff;
 typedef struct isl_multi_aff isl_multi_aff;
 
+ISL_DECLARE_LIST_TYPE(multi_aff)
+
 struct __isl_subclass(isl_multi_pw_aff) __isl_subclass(isl_union_pw_multi_aff)
 	isl_pw_multi_aff;
 typedef struct isl_pw_multi_aff isl_pw_multi_aff;

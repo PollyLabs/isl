@@ -130,6 +130,11 @@ isl_stat isl_aff_check_match_domain_space(__isl_keep isl_aff *aff,
 
 #include <isl_multi_templ.h>
 
+#undef EL
+#define EL isl_multi_aff
+
+#include <isl_list_templ.h>
+
 __isl_give isl_multi_aff *isl_multi_aff_dup(__isl_keep isl_multi_aff *multi);
 
 __isl_give isl_multi_aff *isl_multi_aff_align_divs(
