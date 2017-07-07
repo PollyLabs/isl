@@ -6205,10 +6205,10 @@ static __isl_give isl_schedule_constraints *collect_edge_constraints(
 /* Given a mapping "cluster_map" from the original instances to
  * the cluster instances, add schedule constraints on the clusters
  * to "sc" corresponding to all edges in "graph" between nodes that
- * belong to SCCs that are marked for merging in "scc_in_merge".
+ * belong to SCCs that are marked for merging in "c".
  */
 static __isl_give isl_schedule_constraints *collect_constraints(
-	struct isl_sched_graph *graph, int *scc_in_merge,
+	struct isl_sched_graph *graph, struct isl_clustering *c,
 	__isl_keep isl_union_map *cluster_map,
 	__isl_take isl_schedule_constraints *sc)
 {
@@ -6217,9 +6217,9 @@ static __isl_give isl_schedule_constraints *collect_constraints(
 	for (i = 0; i < graph->n_edge; ++i) {
 		struct isl_sched_edge *edge = &graph->edge[i];
 
-		if (!scc_in_merge[edge->src->scc])
+		if (!c->scc_in_merge[edge->src->scc])
 			continue;
-		if (!scc_in_merge[edge->dst->scc])
+		if (!c->scc_in_merge[edge->dst->scc])
 			continue;
 		sc = collect_edge_constraints(edge, cluster_map, sc);
 	}
@@ -6251,7 +6251,7 @@ static isl_stat init_merge_graph(isl_ctx *ctx, struct isl_sched_graph *graph,
 	if (!sc)
 		return isl_stat_error;
 	cluster_map = collect_cluster_map(ctx, graph, c);
-	sc = collect_constraints(graph, c->scc_in_merge, cluster_map, sc);
+	sc = collect_constraints(graph, c, cluster_map, sc);
 	isl_union_map_free(cluster_map);
 
 	r = graph_init(merge_graph, sc);
