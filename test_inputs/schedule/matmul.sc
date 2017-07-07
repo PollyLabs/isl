@@ -1,0 +1,6 @@
+domain: [N, M, K] -> { A[i, j] : 0 <= i < M and 0 <= j < N; B[i, j, k] : 0 <= i < M and 0 <= j < N and 0 <= k < K }
+validity: [N, M, K] -> { A[i, j] -> B[i' = i, j' = j, k = 0] : K > 0 and 0 <= i < M and 0 <= j < N; A[i, j] -> B[i' = i, j' = j, k = -1 + K] : K > 0 and 0 <= i < M and 0 <= j < N; B[i, j, k] -> B[i' = i, j' = j, k' = 1 + k] : 0 <= i < M and 0 <= j < N and 0 <= k <= -2 + K; B[i, j, k] -> B[i' = i, j' = j, k' = -1 + K] : 0 <= i < M and 0 <= j < N and 0 <= k <= -2 + K }
+proximity: [N, M, K] -> { B[i, j, k] -> B[i' = i, j' = j, k' = 1 + k] : 0 <= i < M and 0 <= j < N and 0 <= k <= -2 + K; A[i, j] -> B[i' = i, j' = j, k = 0] : K > 0 and 0 <= i < M and 0 <= j < N }
+condition: [N, M, K] -> { [A[i, j] -> __pet_ref_2[]] -> [B[i' = i, j' = j, k = 0] -> __pet_ref_5[]] : K > 0 and 0 <= i < M and 0 <= j < N; [B[i, j, k] -> __pet_ref_4[]] -> [B[i' = i, j' = j, k' = 1 + k] -> __pet_ref_5[]] : 0 <= i < M and 0 <= j < N and 0 <= k <= -2 + K }
+conditional_validity: [N, M, K] -> { [B[i, j, k] -> __pet_ref_5[]] -> [B[i' = i, j' = j, k'] -> __pet_ref_4[]] : 0 <= i < M and 0 <= j < N and k >= 0 and k < k' < K }
+intra_consecutivity: ([N, M, K] -> { B[i, j, k] -> [[(i)] -> [(k), (j)]] },[N, M, K] -> { A[i, j] -> [[(i)] -> [(j)]] })
