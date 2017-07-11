@@ -268,13 +268,21 @@ __isl_give isl_pw_multi_aff *isl_tab_basic_map_partial_lexopt_pw_multi_aff(
  * of the given sequence of variables that should not all be zero.
  * If "has_non_zero" is not set, then "non_zero" is NULL.
  *
+ * If "has_fixed" is set, then the rows of "fixed" are linear combinations
+ * of the given sequence of variables that should be equal to
+ * the corresponding value in "fixed_val".
+ * If "has_fixed" is not set, then both "fixed" and "fixed_val" are NULL.
+ *
  * pos is the location (starting at 0) of the first variable in the sequence.
  */
 struct isl_ilp_region {
 	unsigned has_non_zero : 1;
+	unsigned has_fixed : 1;
 
 	int pos;
 	isl_mat *non_zero;
+	isl_mat *fixed;
+	isl_vec *fixed_val;
 };
 
 __isl_give isl_vec *isl_tab_basic_set_constrained_lexmin(

@@ -4976,6 +4976,8 @@ static __isl_give isl_vec *extract_sample_sequence(struct isl_tab *tab,
  * then check if the linear combinations of
  * the specified sequence of variables that are required to be non-zero
  * are all zero.
+ * If region->has_fixed is set, then check if the linear combinations
+ * result in the expected values.
  */
 static isl_bool region_is_violated(struct isl_tab *tab,
 	struct isl_ilp_region *region)
@@ -4996,6 +4998,19 @@ static isl_bool region_is_violated(struct isl_tab *tab,
 		v = extract_sample_sequence(tab, region->pos, len);
 		v = isl_mat_vec_product(isl_mat_copy(region->non_zero), v);
 		violated = isl_vec_is_zero(v);
+		isl_vec_free(v);
+		if (violated < 0 || violated)
+			return violated;
+	}
+
+	if (region->has_fixed) {
+		if (!region->fixed || !region->fixed_val)
+			return isl_bool_error;
+
+		len = isl_mat_cols(region->fixed);
+		v = extract_sample_sequence(tab, region->pos, len);
+		v = isl_mat_vec_product(isl_mat_copy(region->fixed), v);
+		violated = isl_bool_not(isl_vec_is_equal(v, region->fixed_val));
 		isl_vec_free(v);
 		if (violated < 0 || violated)
 			return violated;
@@ -5263,8 +5278,41 @@ enum isl_next {
 	isl_next_handle,
 };
 
+/* If the region referenced by "local" has any associated
+ * linear combinations that need to be equal to fixed values,
+ * then impose those constraints on data->tab.
+ */
+static isl_stat set_fixed(struct isl_local_region *local,
+	struct isl_lexmin_data *data)
+{
+	struct isl_ilp_region *region;
+	int len, i, n;
+
+	region = &data->region[local->region];
+	if (!region->has_fixed)
+		return isl_stat_ok;
+
+	data->v = isl_vec_clr(data->v);
+	if (!data->v)
+		return isl_stat_error;
+
+	n = isl_mat_rows(region->fixed);
+	len = isl_mat_cols(region->fixed);
+	for (i = 0; i < n; ++i) {
+		isl_seq_cpy(data->v->el + 1 + region->pos,
+			    region->fixed->row[i], len);
+		isl_int_neg(data->v->el[0], region->fixed_val->el[i]);
+		if (add_lexmin_eq(data->tab, data->v->el) < 0)
+			return isl_stat_error;
+	}
+
+	return isl_stat_ok;
+}
+
 /* Have all cases of the current region been considered?
  * If there is a non-zero constraint with n directions, then there are 2n cases.
+ * Otherwise, if there is fixed-value constraint, then there is one case
+ * (in which the fixed-value constraint is imposed).
  *
  * The constraints in the current tableau are imposed
  * in all subsequent cases.  This means that if the current
@@ -5281,6 +5329,8 @@ static int finished_all_cases(struct isl_local_region *local,
 	region = &data->region[local->region];
 	if (region->has_non_zero)
 		return local->side >= 2 * local->n;
+	if (region->has_fixed)
+		return local->side >= 1;
 	return 1;
 }
 
@@ -5295,6 +5345,8 @@ static int finished_all_cases(struct isl_local_region *local,
  *
  * In the initialization case, the local region is initialized
  * to point to the first violated region.
+ * If this violated region has any fixed-value constraints,
+ * then impose them on the tableau.
  * If the constraints of all regions are satisfied by the current
  * sample of the tableau, then tell the caller to continue looking
  * for a better solution or to stop searching if an optimal solution
@@ -5337,7 +5389,11 @@ static enum isl_next enter_level(int level, int init,
 		n = 0;
 		if (data->region[r].has_non_zero)
 			n += 2 * local->n;
+		if (data->region[r].has_fixed)
+			n += 2 * isl_mat_rows(data->region[r].fixed);
 		if (isl_tab_extend_cons(data->tab, n + 2 * data->n_op) < 0)
+			return isl_next_error;
+		if (set_fixed(local, data) < 0)
 			return isl_next_error;
 	} else {
 		if (isl_tab_rollback(data->tab, local->snap) < 0)
@@ -5445,6 +5501,11 @@ static void dump_regions(int n_region, struct isl_ilp_region *region)
 			fprintf(stderr, "non_zero\n");
 			isl_mat_dump(region[i].non_zero);
 		}
+		if (region[i].has_fixed) {
+			fprintf(stderr, "fixed\n");
+			isl_mat_dump(region[i].fixed);
+			isl_vec_dump(region[i].fixed_val);
+		}
 	}
 }
 
@@ -5484,6 +5545,9 @@ static void dump_regions(int n_region, struct isl_ilp_region *region)
  *	v_0 = 0 and v_1 = 0 and v_2 <= -1
  *	...
  * in this order.
+ * If there is no non-zero constraint, then the violation must be due
+ * to a fixed-value constraint and a single case is considered
+ * in which this fixed-value constraint is imposed.
  */
 __isl_give isl_vec *isl_tab_basic_set_constrained_lexmin(
 	__isl_take isl_basic_set *bset, int n_op, int n_region,

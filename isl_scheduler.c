@@ -2884,7 +2884,10 @@ static __isl_give isl_mat *linear_to_lp(__isl_keep isl_mat *lin)
 static void clear_region(struct isl_ilp_region *region)
 {
 	region->has_non_zero = 0;
+	region->has_fixed = 0;
 	region->non_zero = isl_mat_free(region->non_zero);
+	region->fixed = isl_mat_free(region->fixed);
+	region->fixed_val = isl_vec_free(region->fixed_val);
 }
 
 /* Solve the ILP problem constructed in setup_lp.
