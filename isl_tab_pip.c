@@ -4971,32 +4971,32 @@ static __isl_give isl_vec *extract_sample_sequence(struct isl_tab *tab,
 	return v;
 }
 
-/* Check if the sequence of variables starting at "pos"
- * represents a trivial solution according to "trivial".
- * That is, is the result of applying "trivial" to this sequence
- * equal to the zero vector?
+/* Check whether the constraint specified by "region" is violated.
+ * In particular, check if the linear combinations of
+ * the specified sequence of variables that are required to be non-zero
+ * are all zero.
  */
-static isl_bool region_is_trivial(struct isl_tab *tab, int pos,
-	__isl_keep isl_mat *trivial)
+static isl_bool region_is_violated(struct isl_tab *tab,
+	struct isl_ilp_region *region)
 {
 	int n, len;
 	isl_vec *v;
-	isl_bool is_trivial;
+	isl_bool violated;
 
-	if (!trivial)
+	if (!region->non_zero)
 		return isl_bool_error;
 
-	n = isl_mat_rows(trivial);
+	n = isl_mat_rows(region->non_zero);
 	if (n == 0)
 		return isl_bool_false;
 
-	len = isl_mat_cols(trivial);
-	v = extract_sample_sequence(tab, pos, len);
-	v = isl_mat_vec_product(isl_mat_copy(trivial), v);
-	is_trivial = isl_vec_is_zero(v);
+	len = isl_mat_cols(region->non_zero);
+	v = extract_sample_sequence(tab, region->pos, len);
+	v = isl_mat_vec_product(isl_mat_copy(region->non_zero), v);
+	violated = isl_vec_is_zero(v);
 	isl_vec_free(v);
 
-	return is_trivial;
+	return violated;
 }
 
 /* Global internal data for isl_tab_basic_set_constrained_lexmin.
@@ -5037,8 +5037,7 @@ static int first_violated_region(struct isl_lexmin_data *data)
 
 	for (i = 0; i < data->n_region; ++i) {
 		isl_bool violated;
-		violated = region_is_trivial(data->tab, data->region[i].pos,
-					data->region[i].non_zero);
+		violated = region_is_violated(data->tab, &data->region[i]);
 		if (violated < 0)
 			return -1;
 		if (violated)
