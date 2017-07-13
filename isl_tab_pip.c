@@ -5050,6 +5050,8 @@ struct isl_lexmin_data {
 
 /* Return the index of the first violated region, "n_region" if no regions
  * are violated or -1 in case of error.
+ *
+ * Disabled optional constraints are skipped.
  */
 static int first_violated_region(struct isl_lexmin_data *data)
 {
@@ -5057,6 +5059,9 @@ static int first_violated_region(struct isl_lexmin_data *data)
 
 	for (i = 0; i < data->n_region; ++i) {
 		isl_bool violated;
+
+		if (data->region[i].optional && data->region[i].disabled)
+			continue;
 		violated = region_is_violated(data->tab, &data->region[i]);
 		if (violated < 0)
 			return -1;
@@ -5191,6 +5196,9 @@ error:
 /* Local data at each level of the backtracking procedure of
  * isl_tab_basic_set_constrained_lexmin.
  *
+ * "update_init" is set if a solution has been found in any previously
+ * considered case at this level.  If the constraint ends up getting
+ * ignored, then a better solution needs to be enforced in the next level.
  * "update" is set if a solution has been found in the current case
  * of this level, such that a better solution needs to be enforced
  * in the next case.
@@ -5200,15 +5208,20 @@ error:
  * "side" is the index of the current case at this level.
  * "n" is the number of non-zero directions, provided "region"
  * has a non-zero constraint.
+ * "snap_init" is a snapshot of the tableau when this level was
+ * initialized.  It is only set if the corresponding region constraint
+ * is optional and is used when the optional constraint is disabled.
  * "snap" is a snapshot of the tableau holding a state that needs
  * to be satisfied by all subsequent cases.
  */
 struct isl_local_region {
+	int update_init;
 	int update;
 	int n_zero;
 	int region;
 	int side;
 	int n;
+	struct isl_tab_undo *snap_init;
 	struct isl_tab_undo *snap;
 };
 
@@ -5239,15 +5252,46 @@ static isl_stat init_lexmin_data(struct isl_lexmin_data *data,
 	return isl_stat_ok;
 }
 
-/* Mark all outer levels as requiring a better solution
- * in the next cases.
+/* Clear the disabled field of all regions.
  */
-static void update_outer_levels(struct isl_lexmin_data *data, int level)
+static void clear_disabled( int n_region, struct isl_ilp_region *region)
 {
 	int i;
 
-	for (i = 0; i < level; ++i)
+	for (i = 0; i < n_region; ++i)
+		region[i].disabled = 0;
+}
+
+/* Remove the optional character of all currently optional constraints
+ * that have not been disabled.
+ */
+static void force_enabled_optional_constraints(int n_region,
+	struct isl_ilp_region *region)
+{
+	int i;
+
+	for (i = 0; i < n_region; ++i) {
+		if (region[i].optional && !region[i].disabled)
+			region[i].optional = 0;
+	}
+}
+
+/* Mark all outer levels as requiring a better solution
+ * in the next cases.
+ * For optional constraints, this means that all those that
+ * are satisfied in the current solution, need to remain
+ * satisfied in any subsequent solution.
+ */
+static void update_regions_and_outer_levels(struct isl_lexmin_data *data,
+	int level)
+{
+	int i;
+
+	for (i = 0; i < level; ++i) {
+		data->local[i].update_init = 1;
 		data->local[i].update = 1;
+	}
+	force_enabled_optional_constraints(data->n_region, data->region);
 }
 
 /* Initialize "local" to refer to region "region" and
@@ -5259,6 +5303,7 @@ static void init_local_region(struct isl_local_region *local, int region,
 	local->n = isl_mat_rows(data->region[region].non_zero);
 	local->region = region;
 	local->side = 0;
+	local->update_init = 0;
 	local->update = 0;
 	local->n_zero = 0;
 }
@@ -5334,6 +5379,42 @@ static int finished_all_cases(struct isl_local_region *local,
 	return 1;
 }
 
+/* Figure out what to do next when level "level" has been entered and
+ * it turns out that there are no more cases left at this level.
+ *
+ * If the constraint is not optional, then the caller needs to backtrack.
+ * Otherwise, rollback to the state of the tableau when the level
+ * was first entered, disable the constraint and tell the caller
+ * to move on to the next level.  A better solution should be enforced
+ * on this next level if a solution has been found in any
+ * of the previous cases at this level (marked by local->update_init being set).
+ * However, any previously added such constraints at this level
+ * have been removed in the rollback, so reset local->n_zero to zero.
+ *
+ * If the constraint was already disabled, then enable it again
+ * and backtrack.
+ */
+static enum isl_next enter_level_finished(int level,
+	struct isl_lexmin_data *data)
+{
+	struct isl_local_region *local = &data->local[level];
+	struct isl_ilp_region *region = &data->region[local->region];
+
+	if (!region->optional)
+		return isl_next_backtrack;
+	if (region->disabled) {
+		region->disabled = 0;
+		return isl_next_backtrack;
+	}
+
+	if (isl_tab_rollback(data->tab, local->snap_init) < 0)
+		return isl_next_error;
+	region->disabled = 1;
+	local->update = local->update_init;
+	local->n_zero = 0;
+	return isl_next_handle;
+}
+
 /* Enter level "level" of the backtracking search and figure out
  * what to do next.  "init" is set if the level was entered
  * from a higher level and needs to be initialized.
@@ -5342,11 +5423,17 @@ static int finished_all_cases(struct isl_local_region *local,
  * be used for the next case at this level.
  * The snapshot is assumed to have been saved in the previous case,
  * before the constraints specific to that case were added.
+ * If the region constraint has been disabled, then the snapshot
+ * is not available and it is not needed either because
+ * the caller simply needs to backtrack.
  *
  * In the initialization case, the local region is initialized
  * to point to the first violated region.
  * If this violated region has any fixed-value constraints,
  * then impose them on the tableau.
+ * If the violated region has an optional constraint, then take
+ * a snapshot first to be able to revert to the original state
+ * when the constraint gets disabled.
  * If the constraints of all regions are satisfied by the current
  * sample of the tableau, then tell the caller to continue looking
  * for a better solution or to stop searching if an optimal solution
@@ -5372,7 +5459,7 @@ static enum isl_next enter_level(int level, int init,
 		if (r < 0)
 			return isl_next_error;
 		if (r == data->n_region) {
-			update_outer_levels(data, level);
+			update_regions_and_outer_levels(data, level);
 			isl_vec_free(data->sol);
 			data->sol = isl_tab_get_sample_value(data->tab);
 			if (!data->sol)
@@ -5393,15 +5480,21 @@ static enum isl_next enter_level(int level, int init,
 			n += 2 * isl_mat_rows(data->region[r].fixed);
 		if (isl_tab_extend_cons(data->tab, n + 2 * data->n_op) < 0)
 			return isl_next_error;
+		if (data->region[r].optional) {
+			local->snap_init = isl_tab_snap(data->tab);
+			if (isl_tab_push_basis(data->tab) < 0)
+				return isl_next_error;
+		}
 		if (set_fixed(local, data) < 0)
 			return isl_next_error;
 	} else {
-		if (isl_tab_rollback(data->tab, local->snap) < 0)
+		if (!data->region[local->region].disabled &&
+		    isl_tab_rollback(data->tab, local->snap) < 0)
 			return isl_next_error;
 	}
 
 	if (finished_all_cases(local, data))
-		return isl_next_backtrack;
+		return enter_level_finished(level, data);
 	return isl_next_handle;
 }
 
@@ -5449,6 +5542,9 @@ static isl_stat better_next_side(struct isl_local_region *local,
  * to be added to data->tab.  A snapshot is still taken even though
  * there is no subsequent case because enter_level performs a rollback
  * before deciding whether there are any subsequent cases.
+ * The only exception is when the constraint has been disabled.
+ * In this case, no snapshot is taken and enter_level will
+ * not try to use any snapshot.
  */
 static isl_stat pick_side(struct isl_local_region *local,
 	struct isl_lexmin_data *data)
@@ -5457,6 +5553,9 @@ static isl_stat pick_side(struct isl_local_region *local,
 	int side, base;
 
 	region = &data->region[local->region];
+	if (region->disabled)
+		return isl_stat_ok;
+
 	side = local->side;
 	base = 2 * (side/2);
 
@@ -5475,6 +5574,24 @@ static isl_stat pick_side(struct isl_local_region *local,
 	if (!data->tab)
 		return isl_stat_error;
 	return isl_stat_ok;
+}
+
+/* Mark all constraints that are still optional as failed.
+ *
+ * This function is only called when a solution has been found.
+ * At that point, force_enabled_optional_constraints was called
+ * to remove the optional character of optional constraints
+ * that had not been disabled.
+ * The remaining optional constraints are therefore those
+ * that were disabled in the last solution, meaning that
+ * they could not be imposed.
+ */
+static void mark_failed(int n_region, struct isl_ilp_region *region)
+{
+	int i;
+
+	for (i = 0; i < n_region; ++i)
+		region[i].failed = region[i].optional;
 }
 
 /* Free the memory associated to "data".
@@ -5496,7 +5613,8 @@ static void dump_regions(int n_region, struct isl_ilp_region *region)
 	int i;
 
 	for (i = 0; i < n_region; ++i) {
-		fprintf(stderr, "%d (%d):\n", i, region[i].pos);
+		fprintf(stderr, "%d (%d)%s:\n", i, region[i].pos,
+			region[i].optional ? " optional" : "");
 		if (region[i].has_non_zero) {
 			fprintf(stderr, "non_zero\n");
 			isl_mat_dump(region[i].non_zero);
@@ -5560,6 +5678,7 @@ __isl_give isl_vec *isl_tab_basic_set_constrained_lexmin(
 	if (!bset)
 		return NULL;
 
+	clear_disabled(n_region, region);
 	if (init_lexmin_data(&data, bset) < 0)
 		goto error;
 	data.tab->conflict = conflict;
@@ -5592,6 +5711,9 @@ __isl_give isl_vec *isl_tab_basic_set_constrained_lexmin(
 		level++;
 		init = 1;
 	}
+
+	if (isl_vec_size(data.sol) != 0)
+		mark_failed(n_region, region);
 
 	clear_lexmin_data(&data);
 	isl_basic_set_free(bset);

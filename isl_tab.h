@@ -274,10 +274,22 @@ __isl_give isl_pw_multi_aff *isl_tab_basic_map_partial_lexopt_pw_multi_aff(
  * If "has_fixed" is not set, then both "fixed" and "fixed_val" are NULL.
  *
  * pos is the location (starting at 0) of the first variable in the sequence.
+ *
+ * If "optional" is set, then an attempt is made to impose the constraint,
+ * but if this fails, then a solution where the constraint is not satisfied
+ * is also accepted.  In this case, the "failed" field is set
+ * by isl_tab_basic_set_constrained_lexmin.
+ * The "optional" field may be modified by isl_tab_basic_set_constrained_lexmin.
+ * The "disabled" field is used internally in
+ * isl_tab_basic_set_constrained_lexmin to indicate that an optional
+ * constraint has been disabled in the current part of the search space.
  */
 struct isl_ilp_region {
 	unsigned has_non_zero : 1;
 	unsigned has_fixed : 1;
+	unsigned optional : 1;
+	unsigned failed : 1;
+	unsigned disabled : 1;
 
 	int pos;
 	isl_mat *non_zero;
