@@ -2892,6 +2892,7 @@ static void clear_region(struct isl_ilp_region *region)
 	region->non_zero = isl_mat_free(region->non_zero);
 	region->fixed = isl_mat_free(region->fixed);
 	region->fixed_val = isl_vec_free(region->fixed_val);
+	region->user = NULL;
 }
 
 /* Solve the ILP problem constructed in setup_lp.

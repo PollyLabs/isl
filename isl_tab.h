@@ -296,6 +296,8 @@ __isl_give isl_pw_multi_aff *isl_tab_basic_map_partial_lexopt_pw_multi_aff(
  * If "conditional" is set, then the (possibly disjunctive) constraint
  * is only considered if the previous constraint (which is assumed to
  * be optional) has been disabled.
+ *
+ * "user" is a field that may be set freely by the caller.
  */
 struct isl_ilp_region {
 	unsigned has_non_zero : 1;
@@ -310,6 +312,8 @@ struct isl_ilp_region {
 	isl_mat *non_zero;
 	isl_mat *fixed;
 	isl_vec *fixed_val;
+
+	void *user;
 };
 
 __isl_give isl_vec *isl_tab_basic_set_constrained_lexmin(
