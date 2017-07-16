@@ -4971,7 +4971,7 @@ static __isl_give isl_vec *extract_sample_sequence(struct isl_tab *tab,
 	return v;
 }
 
-/* Check whether the constraint specified by "region" is violated.
+/* Check whether the constraint specified by "region" is violated on its own.
  * In particular, if region->has_non_zero is set,
  * then check if the linear combinations of
  * the specified sequence of variables that are required to be non-zero
@@ -4979,7 +4979,7 @@ static __isl_give isl_vec *extract_sample_sequence(struct isl_tab *tab,
  * If region->has_fixed is set, then check if the linear combinations
  * result in the expected values.
  */
-static isl_bool region_is_violated(struct isl_tab *tab,
+static isl_bool single_region_is_violated(struct isl_tab *tab,
 	struct isl_ilp_region *region)
 {
 	int n, len;
@@ -5019,6 +5019,25 @@ static isl_bool region_is_violated(struct isl_tab *tab,
 	return isl_bool_false;
 }
 
+/* Check whether the (possibly disjunctive) constraint starting at region[pos]
+ * is violated.
+ * A disjunctive constraint is only violated if all
+ * of the disjuncts are violated.
+ */
+static isl_bool region_is_violated(struct isl_tab *tab,
+	struct isl_ilp_region *region, int pos)
+{
+	isl_bool violated;
+
+	do {
+		violated = single_region_is_violated(tab, &region[pos]);
+		if (violated < 0 || !violated)
+			return violated;
+	} while (region[pos++].disjunctive);
+
+	return violated;
+}
+
 /* Global internal data for isl_tab_basic_set_constrained_lexmin.
  *
  * "n_op" is the number of initial coordinates to optimize,
@@ -5052,6 +5071,9 @@ struct isl_lexmin_data {
  * are violated or -1 in case of error.
  *
  * Disabled optional constraints are skipped.
+ *
+ * If a disjunctive constraint was found not be violated, then skip
+ * over the other disjuncts.
  */
 static int first_violated_region(struct isl_lexmin_data *data)
 {
@@ -5062,11 +5084,13 @@ static int first_violated_region(struct isl_lexmin_data *data)
 
 		if (data->region[i].optional && data->region[i].disabled)
 			continue;
-		violated = region_is_violated(data->tab, &data->region[i]);
+		violated = region_is_violated(data->tab, data->region, i);
 		if (violated < 0)
 			return -1;
 		if (violated)
 			return i;
+		while (data->region[i].disjunctive)
+			++i;
 	}
 
 	return data->n_region;
@@ -5264,6 +5288,9 @@ static void clear_disabled( int n_region, struct isl_ilp_region *region)
 
 /* Remove the optional character of all currently optional constraints
  * that have not been disabled.
+ * In case of a disjunctive constraint, only the last disjunct is made
+ * required.  The other disjuncts need to remain optional such that
+ * a failing disjunct still allows the next disjunct to be considered.
  */
 static void force_enabled_optional_constraints(int n_region,
 	struct isl_ilp_region *region)
@@ -5271,7 +5298,8 @@ static void force_enabled_optional_constraints(int n_region,
 	int i;
 
 	for (i = 0; i < n_region; ++i) {
-		if (region[i].optional && !region[i].disabled)
+		if (region[i].optional &&
+		    !region[i].disjunctive && !region[i].disabled)
 			region[i].optional = 0;
 	}
 }
@@ -5585,13 +5613,16 @@ static isl_stat pick_side(struct isl_local_region *local,
  * The remaining optional constraints are therefore those
  * that were disabled in the last solution, meaning that
  * they could not be imposed.
+ * In case of disjunctive constraints, only the last disjunct
+ * may get its optional character removed, so only this last disjunct
+ * may be marked as failed.
  */
 static void mark_failed(int n_region, struct isl_ilp_region *region)
 {
 	int i;
 
 	for (i = 0; i < n_region; ++i)
-		region[i].failed = region[i].optional;
+		region[i].failed = region[i].optional && !region[i].disjunctive;
 }
 
 /* Free the memory associated to "data".
@@ -5624,6 +5655,8 @@ static void dump_regions(int n_region, struct isl_ilp_region *region)
 			isl_mat_dump(region[i].fixed);
 			isl_vec_dump(region[i].fixed_val);
 		}
+		if (region[i].disjunctive)
+			fprintf(stderr, "or\n");
 	}
 }
 

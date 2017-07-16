@@ -283,6 +283,15 @@ __isl_give isl_pw_multi_aff *isl_tab_basic_map_partial_lexopt_pw_multi_aff(
  * The "disabled" field is used internally in
  * isl_tab_basic_set_constrained_lexmin to indicate that an optional
  * constraint has been disabled in the current part of the search space.
+ *
+ * If "disjunctive" is set, then the constraint is considered satisfied
+ * if either the constraint itself or the next constraint (which may
+ * also be marked disjunctive) is satisfied.
+ * A constraint marked "disjunctive" should always be marked "optional"
+ * to be able to consider the next disjunct when an initial disjunct fails.
+ * A constraint marked "disjunctive" never gets marked "failed".
+ * If the entire disjunctive constraint fails, then it is the last
+ * disjunct (the one not marked "disjunctive") that gets marked "failed".
  */
 struct isl_ilp_region {
 	unsigned has_non_zero : 1;
@@ -290,6 +299,7 @@ struct isl_ilp_region {
 	unsigned optional : 1;
 	unsigned failed : 1;
 	unsigned disabled : 1;
+	unsigned disjunctive : 1;
 
 	int pos;
 	isl_mat *non_zero;
