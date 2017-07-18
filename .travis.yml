@@ -1,0 +1,19 @@
+language: c
+
+compiler:
+        - clang
+        - gcc
+
+dist: trusty
+
+before_install:
+        - sudo apt-get install libgmp-dev libedit-dev
+        - git submodule init
+        - git submodule update
+env:
+        - INT=gmp
+        - INT=imath
+        - INT=imath-32
+
+script:
+        - ./autogen.sh && ./configure --with-int=$INT --with-clang=system && make && make check
