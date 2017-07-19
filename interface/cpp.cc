@@ -1423,6 +1423,14 @@ void cpp_generator::print_wrapped_call_noexceptions(ostream &os,
  * or
  *        try {
  *          auto ret = @call@;
+ *          return ret ? isl_bool_true : isl_bool_false;;
+ *        } catch (...) {
+ *          data->eptr = std::current_exception();
+ *          return isl_bool_error;
+ *        }
+ * or
+ *        try {
+ *          auto ret = @call@;
  *          return ret.release();
  *        } catch (...) {
  *          data->eptr = std::current_exception();
@@ -1441,17 +1449,23 @@ void cpp_generator::print_wrapped_call(ostream &os, const string &call,
 		return print_wrapped_call_noexceptions(os, call, rtype);
 
 	osprintf(os, "    try {\n");
-	if (is_isl_stat(rtype)) {
+	if (is_isl_stat(rtype))
 		osprintf(os, "      %s;\n", call.c_str());
-		osprintf(os, "      return isl_stat_ok;\n");
-	} else {
+	else
 		osprintf(os, "      auto ret = %s;\n", call.c_str());
+	if (is_isl_stat(rtype))
+		osprintf(os, "      return isl_stat_ok;\n");
+	else if (is_isl_bool(rtype))
+		osprintf(os,
+			"      return ret ? isl_bool_true : isl_bool_false;\n");
+	else
 		osprintf(os, "      return ret.release();\n");
-	}
 	osprintf(os, "    } catch (...) {\n"
 		     "      data->eptr = std::current_exception();\n");
 	if (is_isl_stat(rtype))
 		osprintf(os, "      return isl_stat_error;\n");
+	else if (is_isl_bool(rtype))
+		osprintf(os, "      return isl_bool_error;\n");
 	else
 		osprintf(os, "      return NULL;\n");
 	osprintf(os, "    }\n");

@@ -317,10 +317,15 @@ bool generator::first_arg_is_isl_ctx(FunctionDecl *fd)
  * The memory management annotations of arguments to function pointers
  * are not recorded by clang, so the information cannot be extracted
  * from "fn_type".
- * Assume all callbacks take their arguments.
+ * Assume all callbacks take their arguments, except when
+ * the return value is an isl_bool.
  */
 bool generator::callback_takes_arguments(const FunctionProtoType *fn_type)
 {
+	QualType return_type = fn_type->getReturnType();
+
+	if (is_isl_bool(return_type))
+		return false;
 	return true;
 }
 
