@@ -89,8 +89,9 @@ private:
 	string generate_callback_args(QualType type, bool cpp);
 	string generate_callback_type(QualType type);
 	void print_wrapped_call_noexceptions(std::ostream &os,
-		const std::string &call);
-	void print_wrapped_call(std::ostream &os, const std::string &call);
+		const std::string &call, QualType rtype);
+	void print_wrapped_call(std::ostream &os, const std::string &call,
+		QualType rtype);
 	void print_callback_local(ostream &os, ParmVarDecl *param);
 	std::string rename_method(std::string name);
 	string isl_bool2cpp();
