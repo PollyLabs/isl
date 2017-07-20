@@ -9555,6 +9555,9 @@ whereas C<isl_restriction_empty> is essentially equivalent to
 	__isl_give isl_schedule *
 	isl_schedule_constraints_compute_schedule(
 		__isl_take isl_schedule_constraints *sc);
+	__isl_give isl_schedule_node *isl_schedule_node_schedule(
+		__isl_take isl_schedule_node *node,
+		__isl_take isl_schedule_constraints *sc);
 
 The function C<isl_schedule_constraints_compute_schedule> can be
 used to compute a schedule that satisfies the given schedule constraints.
@@ -9590,6 +9593,13 @@ to be non-zero.
 When using Feautrier's algorithm, the coincidence and proximity constraints
 are only taken into account during the extension to a
 full-dimensional schedule.
+
+The function C<isl_schedule_node_schedule> replaces the specified
+subtree of a schedule tree by a schedule satisfying the given
+schedule constraints.  The schedule constraints need to be formulated
+in terms of the domain elements reaching the node.
+Any expansion or extension inside the replaced subtree is lost.
+The replaced subtree itself is not allowed to be part of an extension.
 
 An C<isl_schedule_constraints> object can be constructed
 and manipulated using the following functions.
