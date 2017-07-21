@@ -311,6 +311,14 @@ error:
 	return NULL;
 }
 
+/* A helper struct carrying the isl_access_info and an error condition, which
+ * allows to indicate an error.
+ */
+struct access_sort_info {
+	isl_access_info *access_info;
+	int error;
+};
+
 /* Return -n, 0 or n (with n a positive value), depending on whether
  * the source access identified by p1 should be sorted before, together
  * or after that identified by p2.
@@ -323,10 +331,18 @@ error:
  * If not, we try to order the two statements based on the description
  * of the iteration domains.  This results in an arbitrary, but fairly
  * stable ordering.
+ *
+ * In case of an error, sort_info.error is set to true and all elements are
+ * reported to be equal.
  */
 static int access_sort_cmp(const void *p1, const void *p2, void *user)
 {
-	isl_access_info *acc = user;
+	struct access_sort_info *sort_info = user;
+	isl_access_info *acc = sort_info->access_info;
+
+	if (sort_info->error)
+		return 0;
+
 	const struct isl_labeled_map *i1, *i2;
 	int level1, level2;
 	uint32_t h1, h2;
@@ -334,10 +350,18 @@ static int access_sort_cmp(const void *p1, const void *p2, void *user)
 	i2 = (const struct isl_labeled_map *) p2;
 
 	level1 = acc->level_before(i1->data, i2->data);
+	if (level1 < 0) {
+		sort_info->error = 1;
+		return 0;
+	}
 	if (level1 % 2)
 		return -1;
 
 	level2 = acc->level_before(i2->data, i1->data);
+	if (level2 < 0) {
+		sort_info->error = 1;
+		return 0;
+	}
 	if (level2 % 2)
 		return 1;
 
@@ -351,13 +375,21 @@ static int access_sort_cmp(const void *p1, const void *p2, void *user)
 static __isl_give isl_access_info *isl_access_info_sort_sources(
 	__isl_take isl_access_info *acc)
 {
+	struct access_sort_info sort_info;
+
+	sort_info.access_info = acc;
+	sort_info.error = 0;
+
 	if (!acc)
 		return NULL;
 	if (acc->n_must <= 1)
 		return acc;
 
 	if (isl_sort(acc->source, acc->n_must, sizeof(struct isl_labeled_map),
-		    access_sort_cmp, acc) < 0)
+		    access_sort_cmp, &sort_info) < 0)
+		return isl_access_info_free(acc);
+
+	if (sort_info.error)
 		return isl_access_info_free(acc);
 
 	return acc;
@@ -690,24 +722,32 @@ static int can_precede_at_level(int shared_level, int target_level)
  *
  * If temp_rel[j] is empty, then there can be no improvement and
  * we return immediately.
+ *
+ * This function returns isl_stat_ok in case it was executed successfully and
+ * isl_stat_error in case of errors during the execution of this function.
  */
-static int intermediate_sources(__isl_keep isl_access_info *acc,
+static isl_stat intermediate_sources(__isl_keep isl_access_info *acc,
 	struct isl_map **temp_rel, int j, int sink_level)
 {
 	int k, level;
 	int depth = 2 * isl_map_dim(acc->source[j].map, isl_dim_in) + 1;
 
 	if (isl_map_plain_is_empty(temp_rel[j]))
-		return 0;
+		return isl_stat_ok;
 
 	for (k = j - 1; k >= 0; --k) {
 		int plevel, plevel2;
 		plevel = acc->level_before(acc->source[k].data, acc->sink.data);
+		if (plevel < 0)
+			return isl_stat_error;
+
 		if (!can_precede_at_level(plevel, sink_level))
 			continue;
 
 		plevel2 = acc->level_before(acc->source[j].data,
 						acc->source[k].data);
+		if (plevel < 0)
+			return isl_stat_error;
 
 		for (level = sink_level; level <= depth; ++level) {
 			struct isl_map *T;
@@ -730,7 +770,7 @@ static int intermediate_sources(__isl_keep isl_access_info *acc,
 		}
 	}
 
-	return 0;
+	return isl_stat_ok;
 }
 
 /* Compute all iterations of may source j that precedes the sink at the given
@@ -816,6 +856,8 @@ static __isl_give isl_map *all_intermediate_sources(
 
 		plevel = acc->level_before(acc->source[k].data,
 					acc->source[acc->n_must + j].data);
+		if (plevel < 0)
+			return isl_map_free(map);
 
 		for (level = sink_level; level <= depth; ++level) {
 			isl_map *T;
@@ -950,6 +992,11 @@ static __isl_give isl_flow *handle_coscheduled(__isl_keep isl_access_info *acc,
 				continue;
 			depth = acc->level_before(acc->source[i].data,
 						acc->source[j].data) / 2;
+			if (depth < 0) {
+				isl_map_free(move);
+				isl_flow_free(flow);
+				return NULL;
+			}
 			map = coscheduled_source(acc, must_rel[i], j, depth);
 			factor = isl_map_domain_factor_range(isl_map_copy(map));
 			may_rel[j] = isl_map_union(may_rel[j], factor);
@@ -966,6 +1013,11 @@ static __isl_give isl_flow *handle_coscheduled(__isl_keep isl_access_info *acc,
 				continue;
 			depth = acc->level_before(acc->source[i].data,
 						acc->source[pos].data) / 2;
+			if (depth < 0) {
+				isl_map_free(move);
+				isl_flow_free(flow);
+				return NULL;
+			}
 			map = coscheduled_source(acc, must_rel[i], pos, depth);
 			factor = isl_map_domain_factor_range(isl_map_copy(map));
 			pos = 2 * acc->n_must + j;
@@ -1009,6 +1061,14 @@ static __isl_give isl_flow *compute_mem_based_dependences(
 		isl_map *dep;
 
 		plevel = acc->level_before(acc->source[i].data, acc->sink.data);
+
+		if (plevel < 0) {
+			isl_set_free(mustdo);
+			isl_set_free(maydo);
+			isl_flow_free(res);
+			return NULL;
+		}
+
 		is_before = plevel & 1;
 		plevel >>= 1;
 
@@ -1119,6 +1179,9 @@ static __isl_give isl_flow *compute_val_based_dependences(
 
 			plevel = acc->level_before(acc->source[j].data,
 						     acc->sink.data);
+			if (plevel < 0)
+				goto error;
+
 			if (!can_precede_at_level(plevel, level))
 				continue;
 
@@ -1126,13 +1189,15 @@ static __isl_give isl_flow *compute_val_based_dependences(
 			must_rel[j] = isl_map_union_disjoint(must_rel[j], T);
 			mustdo = rest;
 
-			intermediate_sources(acc, must_rel, j, level);
+			if (intermediate_sources(acc, must_rel, j, level))
+				goto error;
 
 			T = last_source(acc, maydo, j, level, &rest);
 			may_rel[j] = isl_map_union_disjoint(may_rel[j], T);
 			maydo = rest;
 
-			intermediate_sources(acc, may_rel, j, level);
+			if (intermediate_sources(acc, may_rel, j, level))
+				goto error;
 
 			if (isl_set_plain_is_empty(mustdo) &&
 			    isl_set_plain_is_empty(maydo))
@@ -1143,11 +1208,15 @@ static __isl_give isl_flow *compute_val_based_dependences(
 
 			plevel = acc->level_before(acc->source[j].data,
 						     acc->sink.data);
+			if (plevel < 0)
+				goto error;
 			if (!can_precede_at_level(plevel, level))
 				continue;
 
-			intermediate_sources(acc, must_rel, j, level);
-			intermediate_sources(acc, may_rel, j, level);
+			if (intermediate_sources(acc, must_rel, j, level))
+				goto error;
+			if (intermediate_sources(acc, may_rel, j, level))
+				goto error;
 		}
 
 		handle_coscheduled(acc, must_rel, may_rel, res);
@@ -1159,6 +1228,8 @@ static __isl_give isl_flow *compute_val_based_dependences(
 
 			plevel = acc->level_before(acc->source[acc->n_must + j].data,
 						     acc->sink.data);
+			if (plevel < 0)
+				goto error;
 			if (!can_precede_at_level(plevel, level))
 				continue;
 
@@ -2866,6 +2937,8 @@ static isl_bool collect_sink_source(__isl_keep isl_schedule_node *node,
  * if the accesses take place in the same leaf.  Otherwise,
  * it is either a set node or a sequence node.  Only in the case
  * of a sequence node do we consider one access to precede the other.
+ *
+ * In case an error occurred during the computation, -1 is returned.
  */
 static int before_node(void *first, void *second)
 {
