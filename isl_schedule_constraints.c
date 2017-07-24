@@ -47,6 +47,15 @@
  * the outer expressions and inner schedule rows that are equal
  * to the inner expressions (up to linear combinations of outer
  * schedule rows).
+ *
+ * "inter" represents inter-statement consecutivity constraints.
+ * Each element in this list is a product of a relation of
+ * pairs of domain elements that should be made consecutive and
+ * a pair of references to intra-statement consecutivity constraints.
+ * The scheduler will try to schedule the pairs of domain elements
+ * together as long as the outer parts of the intra-statement consecutivity
+ * constraints have not been covered.  At the next level,
+ * it will try to schedule them at a distance of one.
  */
 struct isl_schedule_constraints {
 	isl_union_set *domain;
@@ -54,6 +63,7 @@ struct isl_schedule_constraints {
 
 	isl_union_map *constraint[isl_edge_last_sc + 1];
 	isl_multi_aff_list *intra;
+	isl_map_list *inter;
 };
 
 __isl_give isl_schedule_constraints *isl_schedule_constraints_copy(
@@ -71,7 +81,9 @@ __isl_give isl_schedule_constraints *isl_schedule_constraints_copy(
 	sc_copy->domain = isl_union_set_copy(sc->domain);
 	sc_copy->context = isl_set_copy(sc->context);
 	sc_copy->intra = isl_multi_aff_list_copy(sc->intra);
-	if (!sc_copy->domain || !sc_copy->context || !sc_copy->intra)
+	sc_copy->inter = isl_map_list_copy(sc->inter);
+	if (!sc_copy->domain || !sc_copy->context || !sc_copy->intra ||
+	    !sc_copy->inter)
 		return isl_schedule_constraints_free(sc_copy);
 
 	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i) {
@@ -123,8 +135,10 @@ static __isl_give isl_schedule_constraints *isl_schedule_constraints_init(
 	ctx = isl_schedule_constraints_get_ctx(sc);
 	if (!sc->intra)
 		sc->intra = isl_multi_aff_list_alloc(ctx, 0);
+	if (!sc->inter)
+		sc->inter = isl_map_list_alloc(ctx, 0);
 
-	if (!sc->domain || !sc->context || !sc->intra)
+	if (!sc->domain || !sc->context || !sc->intra || !sc->inter)
 		return isl_schedule_constraints_free(sc);
 
 	return sc;
@@ -273,6 +287,25 @@ error:
 	return NULL;
 }
 
+/* Replace the inter-statement consecutivity constraints of "sc" by "inter".
+ */
+__isl_give isl_schedule_constraints *
+isl_schedule_constraints_set_inter_consecutivity(
+	__isl_take isl_schedule_constraints *sc, __isl_take isl_map_list *inter)
+{
+	if (!sc || !inter)
+		goto error;
+
+	isl_map_list_free(sc->inter);
+	sc->inter = inter;
+
+	return sc;
+error:
+	isl_schedule_constraints_free(sc);
+	isl_map_list_free(inter);
+	return NULL;
+}
+
 __isl_null isl_schedule_constraints *isl_schedule_constraints_free(
 	__isl_take isl_schedule_constraints *sc)
 {
@@ -284,6 +317,7 @@ __isl_null isl_schedule_constraints *isl_schedule_constraints_free(
 	isl_union_set_free(sc->domain);
 	isl_set_free(sc->context);
 	isl_multi_aff_list_free(sc->intra);
+	isl_map_list_free(sc->inter);
 	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i)
 		isl_union_map_free(sc->constraint[i]);
 
@@ -383,6 +417,17 @@ __isl_give isl_multi_aff_list *isl_schedule_constraints_get_intra_consecutivity(
 	return isl_multi_aff_list_copy(sc->intra);
 }
 
+/* Return the inter-statement consecutivity constraints of "sc".
+ */
+__isl_give isl_map_list *isl_schedule_constraints_get_inter_consecutivity(
+	__isl_keep isl_schedule_constraints *sc)
+{
+	if (!sc)
+		return NULL;
+
+	return isl_map_list_copy(sc->inter);
+}
+
 /* Add "c" to the constraints of type "type" in "sc".
  */
 __isl_give isl_schedule_constraints *isl_schedule_constraints_add(
@@ -472,6 +517,9 @@ static __isl_give isl_union_map *apply(__isl_take isl_union_map *c,
  *
  * Intra-statement consecutivity constraints are removed
  * because they cannot be transformed by "umap".
+ * Inter-statement consecutivity constraints are removed
+ * because the referenced intra-statement consecutivity constraints
+ * are removed.
  */
 __isl_give isl_schedule_constraints *isl_schedule_constraints_apply(
 	__isl_take isl_schedule_constraints *sc,
@@ -491,7 +539,8 @@ __isl_give isl_schedule_constraints *isl_schedule_constraints_apply(
 	}
 	sc->domain = isl_union_set_apply(sc->domain, umap);
 	sc->intra = isl_multi_aff_list_clear(sc->intra);
-	if (!sc->domain || !sc->intra)
+	sc->inter = isl_map_list_clear(sc->inter);
+	if (!sc->domain || !sc->intra || !sc->inter)
 		return isl_schedule_constraints_free(sc);
 
 	return sc;
@@ -516,6 +565,7 @@ enum isl_sc_key {
 	isl_sc_key_domain,
 	isl_sc_key_context,
 	isl_sc_key_intra,
+	isl_sc_key_inter,
 	isl_sc_key_end
 };
 
@@ -531,6 +581,7 @@ static char *key_str[] = {
 	[isl_sc_key_domain] = "domain",
 	[isl_sc_key_context] = "context",
 	[isl_sc_key_intra] = "intra_consecutivity",
+	[isl_sc_key_inter] = "inter_consecutivity",
 };
 
 /* Print a key, value pair for the edge of type "type" in "sc" to "p".
@@ -576,6 +627,25 @@ static __isl_give isl_printer *print_intra(__isl_take isl_printer *p,
 	return p;
 }
 
+/* Print a key, value pair for the inter-statement consecutivity constraints.
+ *
+ * If the list of inter-statement consecutivity constraints is empty, then
+ * the list is not printed since an empty list is the default value.
+ */
+static __isl_give isl_printer *print_inter(__isl_take isl_printer *p,
+	__isl_keep isl_schedule_constraints *sc)
+{
+	if (isl_map_list_n_map(sc->inter) == 0)
+		return p;
+
+	p = isl_printer_print_str(p, key_str[isl_sc_key_inter]);
+	p = isl_printer_yaml_next(p);
+	p = isl_printer_print_map_list(p, sc->inter);
+	p = isl_printer_yaml_next(p);
+
+	return p;
+}
+
 /* Print "sc" to "p"
  *
  * In particular, print the isl_schedule_constraints object as a YAML document.
@@ -610,6 +680,7 @@ __isl_give isl_printer *isl_printer_print_schedule_constraints(
 	p = print_constraint(p, sc, isl_edge_condition);
 	p = print_constraint(p, sc, isl_edge_conditional_validity);
 	p = print_intra(p, sc);
+	p = print_inter(p, sc);
 	p = isl_printer_yaml_end_mapping(p);
 
 	return p;
@@ -643,6 +714,10 @@ __isl_give isl_printer *isl_printer_print_schedule_constraints(
 #define BASE multi_aff_list
 #include "read_in_string_templ.c"
 
+#undef BASE
+#define BASE map_list
+#include "read_in_string_templ.c"
+
 /* Read an isl_schedule_constraints object from "s".
  *
  * Start off with an empty (invalid) isl_schedule_constraints object and
@@ -670,6 +745,7 @@ __isl_give isl_schedule_constraints *isl_stream_read_schedule_constraints(
 		isl_union_set *domain;
 		isl_union_map *constraints;
 		isl_multi_aff_list *intra;
+		isl_map_list *inter;
 
 		key = get_key(s);
 		if (isl_stream_yaml_next(s) < 0)
@@ -695,6 +771,13 @@ __isl_give isl_schedule_constraints *isl_stream_read_schedule_constraints(
 			intra = read_multi_aff_list(s);
 			sc = isl_schedule_constraints_set_intra_consecutivity(
 								    sc, intra);
+			if (!sc)
+				return NULL;
+			break;
+		case isl_sc_key_inter:
+			inter = read_map_list(s);
+			sc = isl_schedule_constraints_set_inter_consecutivity(
+								    sc, inter);
 			if (!sc)
 				return NULL;
 			break;
@@ -760,6 +843,29 @@ __isl_give isl_schedule_constraints *isl_schedule_constraints_read_from_str(
 	return sc;
 }
 
+/* Align the initial parameters of "space" to those of "map".
+ */
+static isl_stat space_align_params(__isl_take isl_map *map, void *user)
+{
+	isl_space **space = user;
+
+	*space = isl_space_align_params(*space, isl_map_get_space(map));
+	isl_map_free(map);
+
+	if (!*space)
+		return isl_stat_error;
+	return isl_stat_ok;
+}
+
+/* Align the initial parameters of "map" to those of "space".
+ */
+static __isl_give isl_map *align_params(__isl_take isl_map *map, void *user)
+{
+	isl_space *space = user;
+
+	return isl_map_align_params(map, isl_space_copy(space));
+}
+
 /* Align the parameters of the fields of "sc".
  * The intra-statement consecutivity constraints do not need to have
  * their parameters aligned because only the coefficients
@@ -779,6 +885,8 @@ isl_schedule_constraints_align_params(__isl_take isl_schedule_constraints *sc)
 	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i)
 		space = isl_space_align_params(space,
 				    isl_union_map_get_space(sc->constraint[i]));
+	if (isl_map_list_foreach(sc->inter, &space_align_params, &space) < 0)
+		space = isl_space_free(space);
 
 	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i) {
 		sc->constraint[i] = isl_union_map_align_params(
@@ -786,9 +894,10 @@ isl_schedule_constraints_align_params(__isl_take isl_schedule_constraints *sc)
 		if (!sc->constraint[i])
 			space = isl_space_free(space);
 	}
+	sc->inter = isl_map_list_map(sc->inter, &align_params, space);
 	sc->context = isl_set_align_params(sc->context, isl_space_copy(space));
 	sc->domain = isl_union_set_align_params(sc->domain, space);
-	if (!sc->context || !sc->domain)
+	if (!sc->context || !sc->domain || !sc->inter)
 		return isl_schedule_constraints_free(sc);
 
 	return sc;
@@ -825,6 +934,17 @@ int isl_schedule_constraints_n_basic_map(
 	return n;
 }
 
+/* Return the number of inter-statement consecutivity constraints.
+ * Return -1 on error.
+ */
+int isl_schedule_constraints_n_inter_consecutivity_map(
+	__isl_keep isl_schedule_constraints *sc)
+{
+	if (!sc)
+		return -1;
+	return isl_map_list_n_map(sc->inter);
+}
+
 /* Return the total number of isl_maps in the constraints of "sc".
  */
 int isl_schedule_constraints_n_map(__isl_keep isl_schedule_constraints *sc)
@@ -834,6 +954,7 @@ int isl_schedule_constraints_n_map(__isl_keep isl_schedule_constraints *sc)
 
 	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i)
 		n += isl_union_map_n_map(sc->constraint[i]);
+	n += isl_schedule_constraints_n_inter_consecutivity_map(sc);
 
 	return n;
 }

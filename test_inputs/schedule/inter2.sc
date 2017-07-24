@@ -1,0 +1,3 @@
+domain: [N] -> { S_0[i] : 2*floor((i)/2) = i and 0 <= i < N; S_1[i] : 2*floor((i)/2) = i and 0 <= i < N }
+intra_consecutivity: ([N] -> { S_0[i] -> [[] -> [(i)]] },[N] -> { S_1[i] -> [[] -> [(i)]] },[N] -> { S_0[i] -> intra_0[[] -> [(i)]] },[N] -> { S_1[i] -> intra_1[[] -> [(1 + i)]] },[N] -> { S_1[i] -> intra_2[[] -> [(1 + i)]] },[N] -> { S_0[i] -> intra_3[[] -> [(i)]] })
+inter_consecutivity: ([N] -> { [S_0[i] -> intra_0[]] -> [S_1[i' = i] -> intra_1[]] : 2*floor((i)/2) = i and 0 <= i <= -2 + N },[N] -> { [S_1[i] -> intra_2[]] -> [S_0[i' = 2 + i] -> intra_3[]] : 2*floor((i)/2) = i and 0 <= i <= -3 + N })
