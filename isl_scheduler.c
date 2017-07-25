@@ -1405,24 +1405,31 @@ static struct isl_sched_node *find_range_node(isl_ctx *ctx,
 	return node;
 }
 
-/* Refrain from adding a new edge based on "map".
- * Instead, just free the map.
+/* Refrain from adding a new edge based on "map" to "graph".
+ * Instead, just free the map and tell the caller
+ * no edge was added.
  * "tagged" is either a copy of "map" with additional tags or NULL.
  */
-static isl_stat skip_edge(__isl_take isl_map *map, __isl_take isl_map *tagged)
+static struct isl_sched_edge *skip_edge(struct isl_sched_graph *graph,
+	__isl_take isl_map *map, __isl_take isl_map *tagged)
 {
 	isl_map_free(map);
 	isl_map_free(tagged);
 
-	return isl_stat_ok;
+	return &graph->edge[graph->n_edge];
 }
 
 /* Add a new edge to the graph based on the given map
- * and add it to data->graph->edge_table[data->type].
+ * and add it to graph->edge_table[type].
  * If a dependence relation of a given type happens to be identical
  * to one of the dependence relations of a type that was added before,
  * then we don't create a new edge, but instead mark the original edge
  * as also representing a dependence of the current type.
+ * If no corresponding source or destination nodes can be found,
+ * then no edge is created.
+ * Return a pointer to the new or merged edge if an edge was created or
+ * updated.  Return an invalid edge otherwise.
+ * Return NULL on error.
  *
  * Edges of type isl_edge_condition or isl_edge_conditional_validity
  * may be specified as "tagged" dependence relations.  That is, "map"
@@ -1440,18 +1447,17 @@ static isl_stat skip_edge(__isl_take isl_map *map, __isl_take isl_map *tagged)
  * outside of these domains, while the scheduler no longer has
  * any control over those outside parts.
  */
-static isl_stat extract_edge(__isl_take isl_map *map, void *user)
+static struct isl_sched_edge *add_edge(struct isl_sched_graph *graph,
+	enum isl_edge_type type, __isl_take isl_map *map)
 {
 	isl_bool empty;
 	isl_ctx *ctx = isl_map_get_ctx(map);
-	struct isl_extract_edge_data *data = user;
-	struct isl_sched_graph *graph = data->graph;
 	struct isl_sched_node *src, *dst;
 	struct isl_sched_edge *edge;
 	isl_map *tagged = NULL;
 
-	if (data->type == isl_edge_condition ||
-	    data->type == isl_edge_conditional_validity) {
+	if (type == isl_edge_condition ||
+	    type == isl_edge_conditional_validity) {
 		if (isl_map_can_zip(map)) {
 			tagged = isl_map_copy(map);
 			map = isl_set_unwrap(isl_map_domain(isl_map_zip(map)));
@@ -1466,7 +1472,7 @@ static isl_stat extract_edge(__isl_take isl_map *map, void *user)
 	if (!src || !dst)
 		goto error;
 	if (!is_node(graph, src) || !is_node(graph, dst))
-		return skip_edge(map, tagged);
+		return skip_edge(graph, map, tagged);
 
 	if (src->compressed || dst->compressed) {
 		isl_map *hull;
@@ -1480,7 +1486,7 @@ static isl_stat extract_edge(__isl_take isl_map *map, void *user)
 	if (empty < 0)
 		goto error;
 	if (empty)
-		return skip_edge(map, tagged);
+		return skip_edge(graph, map, tagged);
 
 	graph->edge[graph->n_edge].src = src;
 	graph->edge[graph->n_edge].dst = dst;
@@ -1488,29 +1494,44 @@ static isl_stat extract_edge(__isl_take isl_map *map, void *user)
 	graph->edge[graph->n_edge].types = 0;
 	graph->edge[graph->n_edge].tagged_condition = NULL;
 	graph->edge[graph->n_edge].tagged_validity = NULL;
-	set_type(&graph->edge[graph->n_edge], data->type);
-	if (data->type == isl_edge_condition)
+	set_type(&graph->edge[graph->n_edge], type);
+	if (type == isl_edge_condition)
 		graph->edge[graph->n_edge].tagged_condition =
 					isl_union_map_from_map(tagged);
-	if (data->type == isl_edge_conditional_validity)
+	if (type == isl_edge_conditional_validity)
 		graph->edge[graph->n_edge].tagged_validity =
 					isl_union_map_from_map(tagged);
 
 	edge = graph_find_matching_edge(graph, &graph->edge[graph->n_edge]);
 	if (!edge) {
 		graph->n_edge++;
-		return isl_stat_error;
+		return NULL;
 	}
 	if (edge == &graph->edge[graph->n_edge])
 		edge = &graph->edge[graph->n_edge++];
 	else if (merge_edge(edge, &graph->edge[graph->n_edge]) < 0)
-		return isl_stat_error;
+		return NULL;
 
-	return graph_edge_table_add(ctx, graph, data->type, edge);
+	if (graph_edge_table_add(ctx, graph, type, edge) < 0)
+		return NULL;
+	return edge;
 error:
 	isl_map_free(map);
 	isl_map_free(tagged);
-	return isl_stat_error;
+	return NULL;
+}
+
+/* Add a new edge to the graph based on the given map
+ * and add it to data->graph->edge_table[data->type].
+ */
+static isl_stat extract_edge(__isl_take isl_map *map, void *user)
+{
+	struct isl_extract_edge_data *data = user;
+	struct isl_sched_graph *graph = data->graph;
+	struct isl_sched_edge *edge;
+
+	edge = add_edge(graph, data->type, map);
+	return edge ? isl_stat_ok : isl_stat_error;
 }
 
 /* Insert an intra-statement consecutivity constraint with
