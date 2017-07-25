@@ -1502,10 +1502,8 @@ static isl_stat extract_edge(__isl_take isl_map *map, void *user)
 		return isl_stat_error;
 	}
 	if (edge == &graph->edge[graph->n_edge])
-		return graph_edge_table_add(ctx, graph, data->type,
-				    &graph->edge[graph->n_edge++]);
-
-	if (merge_edge(edge, &graph->edge[graph->n_edge]) < 0)
+		edge = &graph->edge[graph->n_edge++];
+	else if (merge_edge(edge, &graph->edge[graph->n_edge]) < 0)
 		return isl_stat_error;
 
 	return graph_edge_table_add(ctx, graph, data->type, edge);
