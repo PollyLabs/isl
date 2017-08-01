@@ -305,7 +305,8 @@ interface/isl-noexceptions.h: interface/extract_interface libdep.a \
 		cpp/isl-noexceptions.h.pre cpp/isl-noexceptions.h.bot
 	(cat $(srcdir)/cpp/isl-noexceptions.h.top $(srcdir)/all.h \
 	    $(srcdir)/cpp/isl-noexceptions.h.pre && \
-		interface/extract_interface$(EXEEXT) --language=cpp \
+		interface/extract_interface$(EXEEXT) \
+			--language=cpp-noexceptions \
 			$(includes) $(srcdir)/all.h && \
 		cat $(srcdir)/cpp/isl-noexceptions.h.bot) \
 			> $@ || (rm $@ && false)
