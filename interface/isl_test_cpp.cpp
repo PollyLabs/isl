@@ -341,13 +341,40 @@ void test_operators_val(isl::ctx ctx)
 	assert(one != two);
 }
 
+/* Test C++ operators for isl_aff
+ *
+ * This includes:
+ *
+ * # Arithmetic
+ *  - negation
+ *  - addition / subtraction
+ *  - multiplication / division
+ */
+void test_operators_aff(isl::ctx ctx)
+{
+	isl::aff i(ctx, "{ [i] -> [i] }");
+	isl::aff zero(ctx, "{ [i] -> [0] }");
+	isl::aff one(ctx, "{ [i] -> [1] }");
+	isl::aff neg_one(ctx, "{ [i] -> [-1] }");
+	isl::aff two(ctx, "{ [i] -> [2] }");
+	isl::aff four(ctx, "{ [i] -> [4] }");
+
+	assert((-one).plain_is_equal(neg_one));
+	assert((zero + one).plain_is_equal(one));
+	assert((zero - one).plain_is_equal(neg_one));
+	assert((zero * one).plain_is_equal(zero));
+	assert((four / two).plain_is_equal(two));
+}
+
 /* Test C++ operators for:
  *
  * - isl_val
+ * - isl_aff
  */
 void test_operators(isl::ctx ctx)
 {
 	test_operators_val(ctx);
+	test_operators_aff(ctx);
 }
 
 /* Test the isl C++ interface
