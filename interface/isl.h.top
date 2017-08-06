@@ -73,6 +73,7 @@ inline isl::boolean manage(isl_bool val) {
 
 class ctx {
   isl_ctx *ptr;
+
 public:
   /* implicit */ ctx(isl_ctx *ctx)
       : ptr(ctx) {}
@@ -84,6 +85,15 @@ public:
   isl_ctx *get() {
     return ptr;
   }
+
+  static isl::ctx get_default_ctx() {
+     static thread_local isl_ctx *default_ctx = NULL;
+
+    if (!default_ctx)
+      default_ctx = isl_ctx_alloc();
+
+    return default_ctx;
+  };
 };
 
 enum class stat {

@@ -65,6 +65,7 @@ protected:
 	bool is_callback(QualType type);
 	bool is_string(QualType type);
 	bool is_static(const isl_class &clazz, FunctionDecl *method);
+	bool has_ctx_as_first_argument(FunctionDecl *Method);
 	string extract_type(QualType type);
 	FunctionDecl *find_by_name(const string &name, bool required);
 };

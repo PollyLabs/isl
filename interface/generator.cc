@@ -54,6 +54,16 @@ bool generator::is_static(const isl_class &clazz, FunctionDecl *method)
 	return extract_type(type) != clazz.name;
 }
 
+/* Is "method" constructed with isl_ctx as first argument?
+ */
+bool generator::has_ctx_as_first_argument(FunctionDecl *method)
+{
+	ParmVarDecl *param = method->getParamDecl(0);
+	QualType type = param->getOriginalType();
+
+	return is_isl_ctx(type) && method->getNumParams() >= 2;
+}
+
 /* Find the FunctionDecl with name "name",
  * returning NULL if there is no such FunctionDecl.
  * If "required" is set, then error out if no FunctionDecl can be found.
