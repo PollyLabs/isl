@@ -77,6 +77,9 @@ isl_stat isl_##EL##_list_foreach_scc(__isl_keep isl_##EL##_list *list,	\
 __isl_give isl_printer *isl_printer_print_##EL##_list(			\
 	__isl_take isl_printer *p, __isl_keep isl_##EL##_list *list);	\
 void isl_##EL##_list_dump(__isl_keep isl_##EL##_list *list);
+#define ISL_DECLARE_LIST_FN_READ(EL)					\
+__isl_give isl_##EL##_list *isl_##EL##_list_read_from_str(		\
+	isl_ctx *ctx, const char *str);
 
 #define ISL_DECLARE_LIST(EL)						\
 	ISL_DECLARE_LIST_TYPE(EL)					\

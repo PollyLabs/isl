@@ -7925,6 +7925,14 @@ Lists can be printed using
 		__isl_take isl_printer *p,
 		__isl_keep isl_set_list *list);
 
+An C<isl_multi_aff_list> object
+can also be read from input using the following function.
+
+	#include <isl/aff.h>
+	__isl_give isl_multi_aff_list *
+	isl_multi_aff_list_read_from_str(isl_ctx *ctx,
+		const char *str);
+
 =head2 Associative arrays
 
 Associative arrays map isl objects of a specific type to isl objects

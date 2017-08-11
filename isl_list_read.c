@@ -33,3 +33,23 @@ __isl_give LIST(EL) *FN(isl_stream_read,LIST(BASE))(isl_stream *s)
 		return FN(LIST(EL),free)(list);
 	return list;
 }
+
+/* Read a list of elements of type EL from the string "str".
+ * The input format corresponds to the way lists are printed
+ * by isl_printer_print_list_*.
+ * In particular, the elements are separated by a comma and
+ * the entire list is surrounded by parentheses.
+ */
+__isl_give LIST(EL) *FN(LIST(EL),read_from_str)(isl_ctx *ctx,
+	const char *str)
+{
+	LIST(EL) *list;
+	isl_stream *s;
+
+	s = isl_stream_new_str(ctx, str);
+	if (!s)
+		return NULL;
+	list = FN(isl_stream_read,LIST(BASE))(s);
+	isl_stream_free(s);
+	return list;
+}
