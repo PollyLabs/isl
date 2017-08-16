@@ -345,7 +345,8 @@ static int is_multi_edge_type(struct isl_sched_edge *edge)
  *
  * node_table contains pointers into the node array, hashed on the space tuples
  *
- * region contains a list of variable sequences that should be non-trivial
+ * "region" contains a list of variable sequences with constraints
+ * that need to be satisfied.
  *
  * lp contains the (I)LP problem used to obtain new schedule rows
  *
@@ -382,7 +383,7 @@ struct isl_sched_graph {
 	struct isl_hash_table *edge_table[isl_edge_last + 1];
 
 	struct isl_hash_table *node_table;
-	struct isl_trivial_region *region;
+	struct isl_ilp_region *region;
 
 	isl_basic_set *lp;
 
@@ -673,8 +674,7 @@ static isl_stat graph_alloc(isl_ctx *ctx, struct isl_sched_graph *graph,
 	graph->n_edge = n_edge;
 	graph->node = isl_calloc_array(ctx, struct isl_sched_node, graph->n);
 	graph->sorted = isl_calloc_array(ctx, int, graph->n);
-	graph->region = isl_alloc_array(ctx,
-					struct isl_trivial_region, graph->n);
+	graph->region = isl_alloc_array(ctx, struct isl_ilp_region, graph->n);
 	graph->edge = isl_calloc_array(ctx,
 					struct isl_sched_edge, graph->n_edge);
 
@@ -2880,9 +2880,9 @@ static __isl_give isl_mat *linear_to_lp(__isl_keep isl_mat *lin)
 
 /* Solve the ILP problem constructed in setup_lp.
  * For each node such that all the remaining rows of its schedule
- * need to be non-trivial, we construct a non-triviality region.
- * This region imposes that the next row is independent of previous rows.
- * In particular, the non-triviality region enforces that at least
+ * need to be non-trivial, construct a region with a non-triviality constraint.
+ * This region imposes that the next row is independent of previous rows,
+ * by enforcing that at least
  * one of the linear combinations in the rows of node->indep is non-zero.
  */
 static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)

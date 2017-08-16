@@ -5019,7 +5019,7 @@ static isl_bool region_is_trivial(struct isl_tab *tab, int pos,
 struct isl_lexmin_data {
 	int n_op;
 	int n_region;
-	struct isl_trivial_region *region;
+	struct isl_ilp_region *region;
 
 	struct isl_tab *tab;
 	struct isl_local_region *local;
@@ -5028,20 +5028,20 @@ struct isl_lexmin_data {
 	isl_vec *sol;
 };
 
-/* Return the index of the first trivial region, "n_region" if all regions
- * are non-trivial or -1 in case of error.
+/* Return the index of the first violated region, "n_region" if no regions
+ * are violated or -1 in case of error.
  */
-static int first_trivial_region(struct isl_lexmin_data *data)
+static int first_violated_region(struct isl_lexmin_data *data)
 {
 	int i;
 
 	for (i = 0; i < data->n_region; ++i) {
-		isl_bool trivial;
-		trivial = region_is_trivial(data->tab, data->region[i].pos,
+		isl_bool violated;
+		violated = region_is_trivial(data->tab, data->region[i].pos,
 					data->region[i].trivial);
-		if (trivial < 0)
+		if (violated < 0)
 			return -1;
-		if (trivial)
+		if (violated)
 			return i;
 	}
 
@@ -5120,7 +5120,7 @@ error:
  * This function assumes that at least two more rows and at least
  * two more elements in the constraint array are available in the tableau.
  */
-static isl_stat fix_zero(struct isl_tab *tab, struct isl_trivial_region *region,
+static isl_stat fix_zero(struct isl_tab *tab, struct isl_ilp_region *region,
 	int dir, struct isl_lexmin_data *data)
 {
 	int len;
@@ -5137,7 +5137,8 @@ static isl_stat fix_zero(struct isl_tab *tab, struct isl_trivial_region *region,
 	return isl_stat_ok;
 }
 
-/* This function selects case "side" for non-triviality region "region",
+/* This function selects case "side" for the non-triviality constraint
+ * of region "region",
  * assuming all the equality constraints have been imposed already.
  * In particular, the triviality direction side/2 is made positive
  * if side is even and made negative if side is odd.
@@ -5146,7 +5147,7 @@ static isl_stat fix_zero(struct isl_tab *tab, struct isl_trivial_region *region,
  * one more element in the constraint array are available in the tableau.
  */
 static struct isl_tab *pos_neg(struct isl_tab *tab,
-	struct isl_trivial_region *region,
+	struct isl_ilp_region *region,
 	int side, struct isl_lexmin_data *data)
 {
 	int len;
@@ -5176,7 +5177,7 @@ error:
  * in the next case.
  * "n_zero" is the number of initial coordinates that have already
  * been forced to be zero at this level.
- * "region" is the non-triviality region considered at this level.
+ * "region" is the region considered at this level.
  * "side" is the index of the current case at this level.
  * "n" is the number of triviality directions.
  * "snap" is a snapshot of the tableau holding a state that needs
@@ -5305,7 +5306,7 @@ static enum isl_next enter_level(int level, int init,
 			return isl_next_error;
 		if (data->tab->empty)
 			return isl_next_backtrack;
-		r = first_trivial_region(data);
+		r = first_violated_region(data);
 		if (r < 0)
 			return isl_next_error;
 		if (r == data->n_region) {
@@ -5379,7 +5380,7 @@ static isl_stat better_next_side(struct isl_local_region *local,
 static isl_stat pick_side(struct isl_local_region *local,
 	struct isl_lexmin_data *data)
 {
-	struct isl_trivial_region *region;
+	struct isl_ilp_region *region;
 	int side, base;
 
 	region = &data->region[local->region];
@@ -5420,10 +5421,11 @@ static void clear_lexmin_data(struct isl_lexmin_data *data)
  * initial coordinates.  That is, we only continue looking for solutions
  * that increase the number of initial zeros in this sequence.
  *
- * A solution satisfies the constraints, if it is non-trivial on each of the
- * specified regions.  Each region represents a sequence of
+ * Each region represents a constraint that needs to be satisfied.
+ * In particular, it represents a sequence of
  * triviality directions on a sequence of variables that starts
- * at a given position.  A solution is non-trivial on such a region if
+ * at a given position.  A solution satisfies the triviality
+ * constraint of such a region if
  * at least one of the triviality directions is non-zero
  * on that sequence of variables.
  *
@@ -5431,8 +5433,8 @@ static void clear_lexmin_data(struct isl_lexmin_data *data)
  * reported to the caller through a call to "conflict".
  *
  * We perform a simple branch-and-bound backtracking search.
- * Each level in the search represents an initially trivial region
- * that is forced to be non-trivial.
+ * Each level in the search represents an initially violated region
+ * the constraint of which is forced to hold.
  * At each level we consider 2 * n cases, where n
  * is the number of triviality directions.
  * In terms of those n directions v_i, we consider the cases
@@ -5447,7 +5449,7 @@ static void clear_lexmin_data(struct isl_lexmin_data *data)
  */
 __isl_give isl_vec *isl_tab_basic_set_constrained_lexmin(
 	__isl_take isl_basic_set *bset, int n_op, int n_region,
-	struct isl_trivial_region *region,
+	struct isl_ilp_region *region,
 	int (*conflict)(int con, void *user), void *user)
 {
 	struct isl_lexmin_data data = { n_op, n_region, region };
