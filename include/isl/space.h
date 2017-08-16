@@ -37,6 +37,20 @@ __isl_give isl_space *isl_space_alloc(isl_ctx *ctx,
 __isl_give isl_space *isl_space_set_alloc(isl_ctx *ctx,
 			unsigned nparam, unsigned dim);
 __isl_give isl_space *isl_space_params_alloc(isl_ctx *ctx, unsigned nparam);
+
+__isl_give isl_space *isl_space_map_alloc_noparams(isl_ctx *ctx,
+	unsigned n_in, unsigned n_out);
+__isl_give isl_space *isl_space_set_alloc_noparams(isl_ctx *ctx,
+	unsigned n_set);
+__isl_give isl_space *isl_space_params_alloc_empty(isl_ctx *ctx);
+
+__isl_give isl_space *isl_space_map_alloc_from_id_list(
+	__isl_take isl_id_list *param_ids, unsigned n_in, unsigned n_out);
+__isl_give isl_space *isl_space_set_alloc_from_id_list(
+	__isl_take isl_id_list *param_ids, unsigned n_set);
+__isl_give isl_space *isl_space_params_alloc_from_id_list(
+	__isl_take isl_id_list *param_ids);
+
 __isl_give isl_space *isl_space_copy(__isl_keep isl_space *dim);
 __isl_null isl_space *isl_space_free(__isl_take isl_space *space);
 
