@@ -2880,7 +2880,7 @@ static __isl_give isl_mat *linear_to_lp(__isl_keep isl_mat *lin)
 
 /* Solve the ILP problem constructed in setup_lp.
  * For each node such that all the remaining rows of its schedule
- * need to be non-trivial, construct a region with a non-triviality constraint.
+ * need to be non-trivial, construct a region with a non-zero constraint.
  * This region imposes that the next row is independent of previous rows,
  * by enforcing that at least
  * one of the linear combinations in the rows of node->indep is non-zero.
@@ -2900,13 +2900,13 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 			trivial = linear_to_lp(node->indep);
 		else
 			trivial = isl_mat_zero(ctx, 0, 0);
-		graph->region[i].trivial = trivial;
+		graph->region[i].non_zero = trivial;
 	}
 	lp = isl_basic_set_copy(graph->lp);
 	sol = isl_tab_basic_set_constrained_lexmin(lp, 2, graph->n,
 				       graph->region, &check_conflict, graph);
 	for (i = 0; i < graph->n; ++i)
-		isl_mat_free(graph->region[i].trivial);
+		isl_mat_free(graph->region[i].non_zero);
 	return sol;
 }
 

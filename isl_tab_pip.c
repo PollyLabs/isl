@@ -5038,7 +5038,7 @@ static int first_violated_region(struct isl_lexmin_data *data)
 	for (i = 0; i < data->n_region; ++i) {
 		isl_bool violated;
 		violated = region_is_trivial(data->tab, data->region[i].pos,
-					data->region[i].trivial);
+					data->region[i].non_zero);
 		if (violated < 0)
 			return -1;
 		if (violated)
@@ -5115,7 +5115,7 @@ error:
 	return -1;
 }
 
-/* Fix triviality direction "dir" of the given region to zero.
+/* Fix non-zero direction "dir" of the given region to zero.
  *
  * This function assumes that at least two more rows and at least
  * two more elements in the constraint array are available in the tableau.
@@ -5128,8 +5128,8 @@ static isl_stat fix_zero(struct isl_tab *tab, struct isl_ilp_region *region,
 	data->v = isl_vec_clr(data->v);
 	if (!data->v)
 		return isl_stat_error;
-	len = isl_mat_cols(region->trivial);
-	isl_seq_cpy(data->v->el + 1 + region->pos, region->trivial->row[dir],
+	len = isl_mat_cols(region->non_zero);
+	isl_seq_cpy(data->v->el + 1 + region->pos, region->non_zero->row[dir],
 		    len);
 	if (add_lexmin_eq(tab, data->v->el) < 0)
 		return isl_stat_error;
@@ -5137,10 +5137,10 @@ static isl_stat fix_zero(struct isl_tab *tab, struct isl_ilp_region *region,
 	return isl_stat_ok;
 }
 
-/* This function selects case "side" for the non-triviality constraint
+/* This function selects case "side" for the non-zero constraint
  * of region "region",
  * assuming all the equality constraints have been imposed already.
- * In particular, the triviality direction side/2 is made positive
+ * In particular, the non-zero direction side/2 is made positive
  * if side is even and made negative if side is odd.
  *
  * This function assumes that at least one more row and at least
@@ -5156,13 +5156,13 @@ static struct isl_tab *pos_neg(struct isl_tab *tab,
 	if (!data->v)
 		goto error;
 	isl_int_set_si(data->v->el[0], -1);
-	len = isl_mat_cols(region->trivial);
+	len = isl_mat_cols(region->non_zero);
 	if (side % 2 == 0)
 		isl_seq_cpy(data->v->el + 1 + region->pos,
-			    region->trivial->row[side / 2], len);
+			    region->non_zero->row[side / 2], len);
 	else
 		isl_seq_neg(data->v->el + 1 + region->pos,
-			    region->trivial->row[side / 2], len);
+			    region->non_zero->row[side / 2], len);
 	return add_lexmin_ineq(tab, data->v->el);
 error:
 	isl_tab_free(tab);
@@ -5179,7 +5179,7 @@ error:
  * been forced to be zero at this level.
  * "region" is the region considered at this level.
  * "side" is the index of the current case at this level.
- * "n" is the number of triviality directions.
+ * "n" is the number of non-zero directions.
  * "snap" is a snapshot of the tableau holding a state that needs
  * to be satisfied by all subsequent cases.
  */
@@ -5236,7 +5236,7 @@ static void update_outer_levels(struct isl_lexmin_data *data, int level)
 static void init_local_region(struct isl_local_region *local, int region,
 	struct isl_lexmin_data *data)
 {
-	local->n = isl_mat_rows(data->region[region].trivial);
+	local->n = isl_mat_rows(data->region[region].non_zero);
 	local->region = region;
 	local->side = 0;
 	local->update = 0;
@@ -5423,10 +5423,10 @@ static void clear_lexmin_data(struct isl_lexmin_data *data)
  *
  * Each region represents a constraint that needs to be satisfied.
  * In particular, it represents a sequence of
- * triviality directions on a sequence of variables that starts
- * at a given position.  A solution satisfies the triviality
+ * non-zero directions on a sequence of variables that starts
+ * at a given position.  A solution satisfies the non-zero
  * constraint of such a region if
- * at least one of the triviality directions is non-zero
+ * at least one of the non-zero directions is non-zero
  * on that sequence of variables.
  *
  * Whenever a conflict is encountered, all constraints involved are
@@ -5436,7 +5436,7 @@ static void clear_lexmin_data(struct isl_lexmin_data *data)
  * Each level in the search represents an initially violated region
  * the constraint of which is forced to hold.
  * At each level we consider 2 * n cases, where n
- * is the number of triviality directions.
+ * is the number of non-zero directions.
  * In terms of those n directions v_i, we consider the cases
  *	v_0 >= 1
  *	v_0 <= -1
