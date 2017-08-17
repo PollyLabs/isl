@@ -2796,7 +2796,7 @@ static isl_stat setup_lp(isl_ctx *ctx, struct isl_sched_graph *graph,
 }
 
 /* Analyze the conflicting constraint found by
- * isl_tab_basic_set_non_trivial_lexmin.  If it corresponds to the validity
+ * isl_tab_basic_set_constrained_lexmin.  If it corresponds to the validity
  * constraint of one of the edges between distinct nodes, living, moreover
  * in distinct SCCs, then record the source and sink SCC as this may
  * be a good place to cut between SCCs.
@@ -2903,7 +2903,7 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 		graph->region[i].trivial = trivial;
 	}
 	lp = isl_basic_set_copy(graph->lp);
-	sol = isl_tab_basic_set_non_trivial_lexmin(lp, 2, graph->n,
+	sol = isl_tab_basic_set_constrained_lexmin(lp, 2, graph->n,
 				       graph->region, &check_conflict, graph);
 	for (i = 0; i < graph->n; ++i)
 		isl_mat_free(graph->region[i].trivial);

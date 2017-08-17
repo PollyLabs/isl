@@ -270,7 +270,7 @@ struct isl_trivial_region {
 	isl_mat *trivial;
 };
 
-__isl_give isl_vec *isl_tab_basic_set_non_trivial_lexmin(
+__isl_give isl_vec *isl_tab_basic_set_constrained_lexmin(
 	__isl_take isl_basic_set *bset, int n_op, int n_region,
 	struct isl_trivial_region *region,
 	int (*conflict)(int con, void *user), void *user);

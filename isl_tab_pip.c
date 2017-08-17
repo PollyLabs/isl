@@ -4999,17 +4999,17 @@ static isl_bool region_is_trivial(struct isl_tab *tab, int pos,
 	return is_trivial;
 }
 
-/* Global internal data for isl_tab_basic_set_non_trivial_lexmin.
+/* Global internal data for isl_tab_basic_set_constrained_lexmin.
  *
  * "n_op" is the number of initial coordinates to optimize,
- * as passed to isl_tab_basic_set_non_trivial_lexmin.
+ * as passed to isl_tab_basic_set_constrained_lexmin.
  * "region" is the "n_region"-sized array of regions passed
- * to isl_tab_basic_set_non_trivial_lexmin.
+ * to isl_tab_basic_set_constrained_lexmin.
  *
  * "tab" is the tableau that corresponds to the ILP problem.
  * "local" is an array of local data structure, one for each
  * (potential) level of the backtracking procedure of
- * isl_tab_basic_set_non_trivial_lexmin.
+ * isl_tab_basic_set_constrained_lexmin.
  * "v" is a pre-allocated vector that can be used for adding
  * constraints to the tableau.
  *
@@ -5169,7 +5169,7 @@ error:
 }
 
 /* Local data at each level of the backtracking procedure of
- * isl_tab_basic_set_non_trivial_lexmin.
+ * isl_tab_basic_set_constrained_lexmin.
  *
  * "update" is set if a solution has been found in the current case
  * of this level, such that a better solution needs to be enforced
@@ -5409,8 +5409,8 @@ static void clear_lexmin_data(struct isl_lexmin_data *data)
 	isl_tab_free(data->tab);
 }
 
-/* Return the lexicographically smallest non-trivial solution of the
- * given ILP problem.
+/* Return the lexicographically smallest solution of the given ILP problem
+ * that satisfies a sequence of constraints.
  *
  * All variables are assumed to be non-negative.
  *
@@ -5420,7 +5420,7 @@ static void clear_lexmin_data(struct isl_lexmin_data *data)
  * initial coordinates.  That is, we only continue looking for solutions
  * that increase the number of initial zeros in this sequence.
  *
- * A solution is non-trivial, if it is non-trivial on each of the
+ * A solution satisfies the constraints, if it is non-trivial on each of the
  * specified regions.  Each region represents a sequence of
  * triviality directions on a sequence of variables that starts
  * at a given position.  A solution is non-trivial on such a region if
@@ -5445,7 +5445,7 @@ static void clear_lexmin_data(struct isl_lexmin_data *data)
  *	...
  * in this order.
  */
-__isl_give isl_vec *isl_tab_basic_set_non_trivial_lexmin(
+__isl_give isl_vec *isl_tab_basic_set_constrained_lexmin(
 	__isl_take isl_basic_set *bset, int n_op, int n_region,
 	struct isl_trivial_region *region,
 	int (*conflict)(int con, void *user), void *user)
