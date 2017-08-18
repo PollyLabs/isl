@@ -160,6 +160,13 @@ std::vector<string> generator::find_superclasses(RecordDecl *decl)
 	return super;
 }
 
+/* Is decl marked as operator?
+ */
+bool generator::is_operator(Decl *decl)
+{
+	return has_annotation(decl, "isl_operator");
+}
+
 /* Is decl marked as being part of an overloaded method?
  */
 bool generator::is_overload(Decl *decl)

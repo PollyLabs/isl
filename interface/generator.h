@@ -51,6 +51,7 @@ protected:
 	void die(string msg) __attribute__((noreturn));
 	vector<string> find_superclasses(RecordDecl *decl);
 	bool is_overload(Decl *decl);
+	bool is_operator(Decl *decl);
 	bool is_constructor(Decl *decl);
 	bool takes(Decl *decl);
 	bool keeps(Decl *decl);
