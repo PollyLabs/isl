@@ -51,6 +51,59 @@ __isl_give isl_space *isl_space_alloc(isl_ctx *ctx,
 	return dim;
 }
 
+/* Allocate a map space without any parameter dimensions.
+ */
+__isl_give isl_space *isl_space_map_alloc_noparams(isl_ctx *ctx,
+	unsigned n_in, unsigned n_out)
+{
+	return isl_space_alloc(ctx, 0, n_in, n_out);
+}
+
+/* Allocate a map space without any parameter dimensions.
+ */
+__isl_give isl_space *isl_space_set_alloc_noparams(isl_ctx *ctx,
+	unsigned n_set)
+{
+	return isl_space_set_alloc(ctx, 0, n_set);
+}
+
+/* Allocate a parameter space without any parameter dimensions.
+ */
+__isl_give isl_space *isl_space_params_alloc_empty(isl_ctx *ctx)
+{
+	return isl_space_params_alloc(ctx, 0);
+}
+
+/* Allocate a map space with named parameter dimensions.
+ */
+__isl_give isl_space *isl_space_map_alloc_from_id_list(
+	__isl_take isl_id_list *param_ids, unsigned n_in, unsigned n_out)
+{
+	isl_ctx *ctx;
+	isl_space *space;
+	unsigned nparam;
+	int i;
+
+	if (!param_ids)
+		return NULL;
+
+	ctx = isl_id_list_get_ctx(param_ids);
+	nparam = isl_id_list_n_id(param_ids);
+	space = isl_space_alloc(ctx, nparam, n_in, n_out);
+
+	if (!space)
+		return NULL;
+
+	for (i = 0; i < nparam; i++) {
+		isl_id *id = isl_id_list_get_id(param_ids, i);
+		space = isl_space_set_dim_id(space, isl_dim_param, i, id);
+	}
+
+	isl_id_list_free(param_ids);
+
+	return space;
+}
+
 /* Mark the space as being that of a set, by setting the domain tuple
  * to isl_id_none.
  */
@@ -95,6 +148,18 @@ __isl_give isl_space *isl_space_set_alloc(isl_ctx *ctx,
 	return space;
 }
 
+/* Allocate a set space with named parameter dimensions.
+ */
+__isl_give isl_space *isl_space_set_alloc_from_id_list(
+	__isl_take isl_id_list *param_ids, unsigned n_set)
+{
+	isl_space *space;
+
+	space = isl_space_map_alloc_from_id_list(param_ids, 0, n_set);
+	space = mark_as_set(space);
+	return space;
+}
+
 /* Mark the space as being that of a parameter domain, by setting
  * both tuples to isl_id_none.
  */
@@ -104,6 +169,17 @@ static __isl_give isl_space *mark_as_params(isl_space *space)
 		return NULL;
 	space = isl_space_set_tuple_id(space, isl_dim_in, &isl_id_none);
 	space = isl_space_set_tuple_id(space, isl_dim_out, &isl_id_none);
+	return space;
+}
+
+/* Allocate a parameter space with named parameter dimensions.
+ */
+__isl_give isl_space *isl_space_params_alloc_from_id_list(
+	__isl_take isl_id_list *param_ids)
+{
+	isl_space *space;
+	space = isl_space_map_alloc_from_id_list(param_ids, 0, 0);
+	space = mark_as_params(space);
 	return space;
 }
 
