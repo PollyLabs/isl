@@ -4972,7 +4972,8 @@ static __isl_give isl_vec *extract_sample_sequence(struct isl_tab *tab,
 }
 
 /* Check whether the constraint specified by "region" is violated.
- * In particular, check if the linear combinations of
+ * In particular, if region->has_non_zero is set,
+ * then check if the linear combinations of
  * the specified sequence of variables that are required to be non-zero
  * are all zero.
  */
@@ -4983,12 +4984,15 @@ static isl_bool region_is_violated(struct isl_tab *tab,
 	isl_vec *v;
 	isl_bool violated;
 
+	if (!region->has_non_zero)
+		return isl_bool_false;
+
 	if (!region->non_zero)
 		return isl_bool_error;
 
 	n = isl_mat_rows(region->non_zero);
 	if (n == 0)
-		return isl_bool_false;
+		return isl_bool_true;
 
 	len = isl_mat_cols(region->non_zero);
 	v = extract_sample_sequence(tab, region->pos, len);
@@ -5178,7 +5182,8 @@ error:
  * been forced to be zero at this level.
  * "region" is the region considered at this level.
  * "side" is the index of the current case at this level.
- * "n" is the number of non-zero directions.
+ * "n" is the number of non-zero directions, provided "region"
+ * has a non-zero constraint.
  * "snap" is a snapshot of the tableau holding a state that needs
  * to be satisfied by all subsequent cases.
  */
@@ -5420,8 +5425,10 @@ static void dump_regions(int n_region, struct isl_ilp_region *region)
 
 	for (i = 0; i < n_region; ++i) {
 		fprintf(stderr, "%d (%d):\n", i, region[i].pos);
-		fprintf(stderr, "non_zero\n");
-		isl_mat_dump(region[i].non_zero);
+		if (region[i].has_non_zero) {
+			fprintf(stderr, "non_zero\n");
+			isl_mat_dump(region[i].non_zero);
+		}
 	}
 }
 
@@ -5450,8 +5457,8 @@ static void dump_regions(int n_region, struct isl_ilp_region *region)
  * We perform a simple branch-and-bound backtracking search.
  * Each level in the search represents an initially violated region
  * the constraint of which is forced to hold.
- * At each level we consider 2 * n cases, where n
- * is the number of non-zero directions.
+ * For a region with a non-zero constraint, 2 * n cases are considered,
+ * where n is the number of non-zero directions.
  * In terms of those n directions v_i, we consider the cases
  *	v_0 >= 1
  *	v_0 <= -1

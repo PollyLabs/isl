@@ -262,11 +262,17 @@ __isl_give isl_pw_multi_aff *isl_tab_basic_map_partial_lexopt_pw_multi_aff(
 
 /* An isl_ilp_region represents a region of variables in the ILP problem
  * where some constraint needs to hold.
- * In particular, the rows of "non_zero" are linear combinations
+ *
+ * In particular, if "has_non_zero" is set,
+ * then the rows of "non_zero" are linear combinations
  * of the given sequence of variables that should not all be zero.
+ * If "has_non_zero" is not set, then "non_zero" is NULL.
+ *
  * pos is the location (starting at 0) of the first variable in the sequence.
  */
 struct isl_ilp_region {
+	unsigned has_non_zero : 1;
+
 	int pos;
 	isl_mat *non_zero;
 };

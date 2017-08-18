@@ -674,7 +674,7 @@ static isl_stat graph_alloc(isl_ctx *ctx, struct isl_sched_graph *graph,
 	graph->n_edge = n_edge;
 	graph->node = isl_calloc_array(ctx, struct isl_sched_node, graph->n);
 	graph->sorted = isl_calloc_array(ctx, int, graph->n);
-	graph->region = isl_alloc_array(ctx, struct isl_ilp_region, graph->n);
+	graph->region = isl_calloc_array(ctx, struct isl_ilp_region, graph->n);
 	graph->edge = isl_calloc_array(ctx,
 					struct isl_sched_edge, graph->n_edge);
 
@@ -2878,11 +2878,13 @@ static __isl_give isl_mat *linear_to_lp(__isl_keep isl_mat *lin)
 	return mat;
 }
 
-/* Clear all memory associated to "region".
+/* Clear all memory associated to "region" and reset the fields
+ * to their default values.
  */
 static void clear_region(struct isl_ilp_region *region)
 {
-	isl_mat_free(region->non_zero);
+	region->has_non_zero = 0;
+	region->non_zero = isl_mat_free(region->non_zero);
 }
 
 /* Solve the ILP problem constructed in setup_lp.
@@ -2900,14 +2902,12 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 
 	for (i = 0; i < graph->n; ++i) {
 		struct isl_sched_node *node = &graph->node[i];
-		isl_mat *trivial;
 
 		graph->region[i].pos = node_var_coef_offset(node);
-		if (needs_row(graph, node))
-			trivial = linear_to_lp(node->indep);
-		else
-			trivial = isl_mat_zero(ctx, 0, 0);
-		graph->region[i].non_zero = trivial;
+		graph->region[i].has_non_zero = needs_row(graph, node);
+		if (!graph->region[i].has_non_zero)
+			continue;
+		graph->region[i].non_zero = linear_to_lp(node->indep);
 	}
 	lp = isl_basic_set_copy(graph->lp);
 	sol = isl_tab_basic_set_constrained_lexmin(lp, 2, graph->n,
