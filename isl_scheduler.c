@@ -2878,6 +2878,13 @@ static __isl_give isl_mat *linear_to_lp(__isl_keep isl_mat *lin)
 	return mat;
 }
 
+/* Clear all memory associated to "region".
+ */
+static void clear_region(struct isl_ilp_region *region)
+{
+	isl_mat_free(region->non_zero);
+}
+
 /* Solve the ILP problem constructed in setup_lp.
  * For each node such that all the remaining rows of its schedule
  * need to be non-trivial, construct a region with a non-zero constraint.
@@ -2906,7 +2913,7 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 	sol = isl_tab_basic_set_constrained_lexmin(lp, 2, graph->n,
 				       graph->region, &check_conflict, graph);
 	for (i = 0; i < graph->n; ++i)
-		isl_mat_free(graph->region[i].non_zero);
+		clear_region(&graph->region[i]);
 	return sol;
 }
 
