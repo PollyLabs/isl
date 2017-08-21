@@ -4984,23 +4984,24 @@ static isl_bool region_is_violated(struct isl_tab *tab,
 	isl_vec *v;
 	isl_bool violated;
 
-	if (!region->has_non_zero)
-		return isl_bool_false;
+	if (region->has_non_zero) {
+		if (!region->non_zero)
+			return isl_bool_error;
 
-	if (!region->non_zero)
-		return isl_bool_error;
+		n = isl_mat_rows(region->non_zero);
+		if (n == 0)
+			return isl_bool_true;
 
-	n = isl_mat_rows(region->non_zero);
-	if (n == 0)
-		return isl_bool_true;
+		len = isl_mat_cols(region->non_zero);
+		v = extract_sample_sequence(tab, region->pos, len);
+		v = isl_mat_vec_product(isl_mat_copy(region->non_zero), v);
+		violated = isl_vec_is_zero(v);
+		isl_vec_free(v);
+		if (violated < 0 || violated)
+			return violated;
+	}
 
-	len = isl_mat_cols(region->non_zero);
-	v = extract_sample_sequence(tab, region->pos, len);
-	v = isl_mat_vec_product(isl_mat_copy(region->non_zero), v);
-	violated = isl_vec_is_zero(v);
-	isl_vec_free(v);
-
-	return violated;
+	return isl_bool_false;
 }
 
 /* Global internal data for isl_tab_basic_set_constrained_lexmin.
