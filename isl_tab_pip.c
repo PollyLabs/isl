@@ -5264,7 +5264,7 @@ enum isl_next {
 };
 
 /* Have all cases of the current region been considered?
- * If there are n directions, then there are 2n cases.
+ * If there is a non-zero constraint with n directions, then there are 2n cases.
  *
  * The constraints in the current tableau are imposed
  * in all subsequent cases.  This means that if the current
@@ -5274,9 +5274,14 @@ enum isl_next {
 static int finished_all_cases(struct isl_local_region *local,
 	struct isl_lexmin_data *data)
 {
+	struct isl_ilp_region *region;
+
 	if (data->tab->empty)
 		return 1;
-	return local->side >= 2 * local->n;
+	region = &data->region[local->region];
+	if (region->has_non_zero)
+		return local->side >= 2 * local->n;
+	return 1;
 }
 
 /* Enter level "level" of the backtracking search and figure out
