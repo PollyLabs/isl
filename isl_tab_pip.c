@@ -5381,6 +5381,11 @@ static isl_stat better_next_side(struct isl_local_region *local,
  * A snapshot is taken after the equality constraint (if any) has been added
  * such that the next case can start off from this position.
  * The rollback to this position is performed in enter_level.
+ *
+ * If there are no non-zero constraints, then no constraints need
+ * to be added to data->tab.  A snapshot is still taken even though
+ * there is no subsequent case because enter_level performs a rollback
+ * before deciding whether there are any subsequent cases.
  */
 static isl_stat pick_side(struct isl_local_region *local,
 	struct isl_lexmin_data *data)
@@ -5392,13 +5397,16 @@ static isl_stat pick_side(struct isl_local_region *local,
 	side = local->side;
 	base = 2 * (side/2);
 
-	if (side == base && base >= 2 &&
+	if (region->has_non_zero && side == base && base >= 2 &&
 	    fix_zero(data->tab, region, base / 2 - 1, data) < 0)
 		return isl_stat_error;
 
 	local->snap = isl_tab_snap(data->tab);
 	if (isl_tab_push_basis(data->tab) < 0)
 		return isl_stat_error;
+
+	if (!region->has_non_zero)
+		return isl_stat_ok;
 
 	data->tab = pos_neg(data->tab, region, side, data);
 	if (!data->tab)
