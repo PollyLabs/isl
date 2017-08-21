@@ -5309,7 +5309,7 @@ static enum isl_next enter_level(int level, int init,
 	struct isl_local_region *local = &data->local[level];
 
 	if (init) {
-		int r;
+		int n, r;
 
 		data->tab = cut_to_integer_lexmin(data->tab, CUT_ONE);
 		if (!data->tab)
@@ -5334,8 +5334,10 @@ static enum isl_next enter_level(int level, int init,
 				"nesting level too deep",
 				return isl_next_error);
 		init_local_region(local, r, data);
-		if (isl_tab_extend_cons(data->tab,
-				    2 * local->n + 2 * data->n_op) < 0)
+		n = 0;
+		if (data->region[r].has_non_zero)
+			n += 2 * local->n;
+		if (isl_tab_extend_cons(data->tab, n + 2 * data->n_op) < 0)
 			return isl_next_error;
 	} else {
 		if (isl_tab_rollback(data->tab, local->snap) < 0)
