@@ -18,6 +18,11 @@
 #include <isl_id_private.h>
 #include <isl_reordering.h>
 
+#undef BASE
+#define BASE space
+
+#include <isl_list_templ.c>
+
 isl_ctx *isl_space_get_ctx(__isl_keep isl_space *dim)
 {
 	return dim ? dim->ctx : NULL;

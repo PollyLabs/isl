@@ -5,8 +5,12 @@
 extern "C" {
 #endif
 
+#include <isl/list.h>
+
 struct isl_space;
 typedef struct isl_space isl_space;
+
+ISL_DECLARE_LIST_TYPE(space)
 
 enum isl_dim_type {
 	isl_dim_cst,
