@@ -15,6 +15,8 @@
  * CS 42112, 75589 Paris Cedex 12, France
  */
 
+#include <string.h>
+
 #include <isl_ctx_private.h>
 #include <isl_map_private.h>
 #include <isl_space_private.h>
@@ -347,6 +349,7 @@ static int is_multi_edge_type(struct isl_sched_edge *edge)
  *
  * "region" contains a list of variable sequences with constraints
  * that need to be satisfied.
+ * "n_region" contains the size of the allocated array.
  *
  * lp contains the (I)LP problem used to obtain new schedule rows
  *
@@ -383,6 +386,7 @@ struct isl_sched_graph {
 	struct isl_hash_table *edge_table[isl_edge_last + 1];
 
 	struct isl_hash_table *node_table;
+	int n_region;
 	struct isl_ilp_region *region;
 
 	isl_basic_set *lp;
@@ -674,7 +678,9 @@ static isl_stat graph_alloc(isl_ctx *ctx, struct isl_sched_graph *graph,
 	graph->n_edge = n_edge;
 	graph->node = isl_calloc_array(ctx, struct isl_sched_node, graph->n);
 	graph->sorted = isl_calloc_array(ctx, int, graph->n);
-	graph->region = isl_calloc_array(ctx, struct isl_ilp_region, graph->n);
+	graph->n_region = graph->n;
+	graph->region = isl_calloc_array(ctx, struct isl_ilp_region,
+					graph->n_region);
 	graph->edge = isl_calloc_array(ctx,
 					struct isl_sched_edge, graph->n_edge);
 
@@ -688,6 +694,31 @@ static isl_stat graph_alloc(isl_ctx *ctx, struct isl_sched_graph *graph,
 
 	for(i = 0; i < graph->n; ++i)
 		graph->sorted[i] = i;
+
+	return isl_stat_ok;
+}
+
+/* Extend the size of graph->region to contain at least "n" elements,
+ * clearing the additionally allocated elements.
+ */
+static isl_stat graph_extend_region(isl_ctx *ctx, struct isl_sched_graph *graph,
+	int n)
+{
+	struct isl_ilp_region *region;
+
+	if (graph->n_region >= n)
+		return isl_stat_ok;
+
+	n = (n + 1) * 3 / 2;
+	region = isl_realloc_array(ctx, graph->region, struct isl_ilp_region,
+					n);
+	if (!region)
+		return isl_stat_error;
+
+	memset(region + graph->n_region, 0,
+		(n - graph->n_region) * sizeof(struct isl_ilp_region));
+	graph->region = region;
+	graph->n_region = n;
 
 	return isl_stat_ok;
 }
@@ -2908,6 +2939,8 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 	isl_vec *sol;
 	isl_basic_set *lp;
 
+	if (graph_extend_region(ctx, graph, graph->n) < 0)
+		return NULL;
 	for (i = 0; i < graph->n; ++i) {
 		struct isl_sched_node *node = &graph->node[i];
 
