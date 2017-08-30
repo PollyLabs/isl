@@ -2888,6 +2888,7 @@ static void clear_region(struct isl_ilp_region *region)
 	region->optional = 0;
 	region->failed = 0;
 	region->disjunctive = 0;
+	region->conditional = 0;
 	region->non_zero = isl_mat_free(region->non_zero);
 	region->fixed = isl_mat_free(region->fixed);
 	region->fixed_val = isl_vec_free(region->fixed_val);

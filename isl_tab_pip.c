@@ -5023,11 +5023,17 @@ static isl_bool single_region_is_violated(struct isl_tab *tab,
  * is violated.
  * A disjunctive constraint is only violated if all
  * of the disjuncts are violated.
+ *
+ * If the constraint is marked conditional and the previous constraint
+ * is not currently disabled, then ignore the constraint.
  */
 static isl_bool region_is_violated(struct isl_tab *tab,
 	struct isl_ilp_region *region, int pos)
 {
 	isl_bool violated;
+
+	if (pos > 0 && region[pos].conditional && !region[pos - 1].disabled)
+		return isl_bool_false;
 
 	do {
 		violated = single_region_is_violated(tab, &region[pos]);
@@ -5291,6 +5297,13 @@ static void clear_disabled( int n_region, struct isl_ilp_region *region)
  * In case of a disjunctive constraint, only the last disjunct is made
  * required.  The other disjuncts need to remain optional such that
  * a failing disjunct still allows the next disjunct to be considered.
+ *
+ * Note that this also affects conditional constraints
+ * that have not been activated yet.  Even if they are no longer "optional",
+ * they will remain "conditional" and since the constraints on which
+ * they depend were not disabled, they will no longer be optional,
+ * meaning that they can no longer get disabled and the conditional
+ * constraints will never be activated.
  */
 static void force_enabled_optional_constraints(int n_region,
 	struct isl_ilp_region *region)
@@ -5616,6 +5629,10 @@ static isl_stat pick_side(struct isl_local_region *local,
  * In case of disjunctive constraints, only the last disjunct
  * may get its optional character removed, so only this last disjunct
  * may be marked as failed.
+ *
+ * Conditional constraints that have not been activated are
+ * also marked non-optional by force_enabled_optional_constraints and
+ * will therefore not get marked failed.
  */
 static void mark_failed(int n_region, struct isl_ilp_region *region)
 {
@@ -5644,8 +5661,9 @@ static void dump_regions(int n_region, struct isl_ilp_region *region)
 	int i;
 
 	for (i = 0; i < n_region; ++i) {
-		fprintf(stderr, "%d (%d)%s:\n", i, region[i].pos,
-			region[i].optional ? " optional" : "");
+		fprintf(stderr, "%d (%d)%s%s:\n", i, region[i].pos,
+			region[i].optional ? " optional" : "",
+			region[i].conditional ? " conditional" : "");
 		if (region[i].has_non_zero) {
 			fprintf(stderr, "non_zero\n");
 			isl_mat_dump(region[i].non_zero);
