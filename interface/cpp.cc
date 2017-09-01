@@ -171,6 +171,7 @@ void cpp_generator::print_class(ostream &os, const isl_class &clazz)
 	print_ptr_decl(os, clazz);
 	osprintf(os, "\n");
 	print_methods_decl(os, clazz);
+	print_custom_public_decl(os, clazz);
 
 	osprintf(os, "};\n");
 }
@@ -371,6 +372,31 @@ void cpp_generator::print_methods_decl(ostream &os, const isl_class &clazz)
 		print_method_group_decl(os, clazz, it->first, it->second);
 }
 
+/* Print declarations for custom members of a class "clazz" to "os", based on
+ * the class name.
+ */
+void cpp_generator::print_custom_public_decl(ostream &os,
+	const isl_class &clazz)
+{
+	string cppname = type2cpp(clazz);
+
+	if ("id" == cppname) {
+		const char *declarations =
+			"  inline id(isl::ctx ctx, const std::string &name);\n"
+			"  inline id(isl::ctx ctx, const std::string &name,\n"
+			"            void *usr,\n"
+			"            void (*deleter)(void *) = nullptr);\n"
+			"  inline id(isl::ctx ctx, void *usr,\n"
+			"            void (*deleter)(void *) = nullptr);\n"
+			"  inline bool has_name() const;\n"
+			"  inline id set_free_user("
+			"void (*deleter)(void *)) const;\n"
+			"  inline bool operator==(const id &other) const;\n"
+			"  inline bool operator!=(const id &other) const;\n";
+		osprintf(os, "%s", declarations);
+	}
+}
+
 /* Print declarations for methods "methods" of name "fullname" in class "clazz"
  * to "os".
  *
@@ -427,6 +453,8 @@ void cpp_generator::print_class_impl(ostream &os, const isl_class &clazz)
 	print_ptr_impl(os, clazz);
 	osprintf(os, "\n");
 	print_methods_impl(os, clazz);
+	osprintf(os, "\n");
+	print_custom_methods_impl(os, clazz);
 }
 
 /* Print implementation of global factory function to "os".
@@ -560,6 +588,49 @@ void cpp_generator::print_methods_impl(ostream &os, const isl_class &clazz)
 		else
 			osprintf(os, "\n");
 		print_method_group_impl(os, clazz, it->first, it->second);
+	}
+}
+
+/* Print definitions for custom methods of class "clazz" to "os", based on the
+ * class name.
+ */
+void cpp_generator::print_custom_methods_impl(ostream &os,
+	const isl_class &clazz)
+{
+	string name = type2cpp(clazz);
+	if ("id" == name) {
+		const char *definitions =
+			"id::id(isl::ctx ctx, const std::string &name) {\n"
+			"  ptr = isl_id_alloc(ctx.get(), name.c_str(),\n"
+			"                     nullptr);\n"
+			"}\n\n"
+			"id::id(isl::ctx ctx, const std::string &name,\n"
+			"       void *user, void (*deleter)(void *)) {\n"
+			"  ptr = isl_id_alloc(ctx.get(), name.c_str(), user);\n"
+			"  if (deleter)\n"
+			"    ptr = isl_id_set_free_user(ptr, deleter);\n"
+			"}\n\n"
+			"id::id(isl::ctx ctx, void *user,\n"
+			"       void (*deleter)(void *)) {\n"
+			"  ptr = isl_id_alloc(ctx.get(), nullptr, user);\n"
+			"  if (deleter)\n"
+			"    ptr = isl_id_set_free_user(ptr, deleter);\n"
+			"}\n\n"
+			"bool id::has_name() const {\n"
+			"  return isl_id_get_name(ptr) != nullptr;\n"
+			"}\n\n"
+			"id id::set_free_user("
+			"void (*deleter)(void *)) const {\n"
+			"  auto res = isl_id_set_free_user(copy(), deleter);\n"
+			"  return manage(res);\n"
+			"}\n\n"
+			"bool id::operator==(const isl::id &other) const {\n"
+			"  return ptr == other.ptr;\n"
+			"}\n\n"
+			"bool id::operator!=(const isl::id &other) const {\n"
+			"  return !operator==(other);\n"
+			"}\n\n";
+		osprintf(os, "%s", definitions);
 	}
 }
 
@@ -1023,7 +1094,8 @@ string cpp_generator::type2cpp(QualType type)
 	if (is_isl_stat(type))
 		return "isl::stat";
 
-	if (type->isIntegerType())
+	if (type->isIntegerType() || type->isVoidType() ||
+	    type->isVoidPointerType())
 		return type.getAsString();
 
 	if (is_string(type))

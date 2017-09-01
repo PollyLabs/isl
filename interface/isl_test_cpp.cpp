@@ -314,6 +314,71 @@ void test_foreach(isl::ctx ctx)
 	assert(ret2 == isl::stat::error);
 }
 
+/* Test that ids are handled correctly and remain unique.
+ *
+ * Verify that id names are stored and returned correctly. Check that ids with
+ * identical names are equal and those with different names are different.
+ * Check that ids with identical names and different user pointers are
+ * different. Verify that equality holds across ids constructed from C and C++
+ * interfaces.
+ */
+void test_id(isl::ctx ctx)
+{
+	isl::id id_whatever(ctx, std::string("whatever"));
+	assert(id_whatever.has_name());
+	assert(std::string("whatever") == id_whatever.get_name());
+
+	isl::id id_other(ctx, std::string("whatever"));
+	assert(id_whatever == id_other);
+
+	int fourtytwo = 42;
+	isl::id id_whatever_42(ctx, std::string("whatever"), &fourtytwo);
+	assert(id_whatever != id_whatever_42);
+
+	isl::id id_whatever_42_copy(id_whatever_42);
+	assert(id_whatever_42 == id_whatever_42_copy);
+
+	isl::id id_whatever_42_other(ctx, std::string("whatever"), &fourtytwo);
+	assert(id_whatever_42 == id_whatever_42_other);
+
+	isl_id *cid = isl_id_alloc(ctx.get(), "whatever", &fourtytwo);
+	assert(cid == id_whatever_42.get());
+	isl_id_free(cid);
+}
+
+static void reset_flag(void *user) {
+	*static_cast<int *>(user) = 0;
+}
+
+/* Test that user pointers of the ids are not freed as long as the exists at
+ * least one id pointing to them, either in C or C++.
+ *
+ * In a scope, create an id with a flag as a user object and a user_free that
+ * resets the flag. Use the id in a set object that lives outside the given
+ * scope. Check that flag is still set after the id object went out of the
+ * scope. Check that flag is reset after the set object went of of scope.
+ */
+void test_id_lifetime(isl::ctx ctx)
+{
+	int *flag = new int(1);
+
+	{
+		isl::set set(ctx, "{:}");
+		{
+			isl::id id(ctx, std::string("whatever"), flag,
+				&reset_flag);
+			set = set.set_tuple_id(id);
+		}
+		assert(1 == *flag);
+		assert(set.has_tuple_id());
+
+		isl::id same_id(ctx, std::string("whatever"), flag);
+		assert(set.get_tuple_id() == same_id);
+	}
+	assert(0 == *flag);
+	delete flag;
+}
+
 /* Test the isl C++ interface
  *
  * This includes:
@@ -322,6 +387,8 @@ void test_foreach(isl::ctx ctx)
  *  - Different parameter types
  *  - Different return types
  *  - Foreach functions
+ *  - isl::id uniqueness
+ *  - isl::id lifetime
  */
 int main()
 {
@@ -332,6 +399,8 @@ int main()
 	test_parameters(ctx);
 	test_return(ctx);
 	test_foreach(ctx);
+	test_id(ctx);
+	test_id_lifetime(ctx);
 
 	isl_ctx_free(ctx);
 }
