@@ -13,6 +13,7 @@ extern "C" {
 struct __isl_export isl_val;
 typedef struct isl_val isl_val;
 
+struct __isl_list(isl_val) isl_val_list;
 ISL_DECLARE_LIST(val)
 
 struct __isl_export isl_multi_val;
