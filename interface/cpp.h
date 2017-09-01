@@ -82,5 +82,6 @@ private:
 	bool is_list_type(QualType type);
 	bool is_list_type(const isl_class &clazz);
 	string list_element_type_name(QualType type);
+	string list_element_type_name(const isl_class &clazz);
 	string instance_type(const string &type_string);
 };
