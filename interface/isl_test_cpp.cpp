@@ -379,6 +379,51 @@ void test_id_lifetime(isl::ctx ctx)
 	delete flag;
 }
 
+/* Test that read-only list of vals are modeled correctly.
+ *
+ * Construct an std::vector of isl::vals and use its iterators to construct a
+ * C++ isl list of vals. Compare these containers. Extract the C isl list from
+ * the C++ one, verify that is has expected size and content. Modify the C isl
+ * list and convert it back to C++. Verify that the new managed list has
+ * expected content.
+ */
+void test_val_list(isl::ctx ctx)
+{
+	std::vector<isl::val> val_vector;
+	for (int i = 0; i < 42; ++i) {
+		isl::val val(ctx, i);
+		val_vector.push_back(val);
+	}
+	isl::list<isl::val> val_list(ctx, val_vector.begin(),
+		val_vector.end());
+
+	assert(42 == val_list.size());
+	for (int i = 0; i < 42; ++i) {
+		isl::val val_at = val_list.at(i);
+		isl::val val_op = val_list[i];
+		isl::val expected(ctx, i);
+		assert(val_at.eq(expected));
+		assert(val_op.eq(expected));
+	}
+
+	isl_val_list *c_val_list = val_list.release();
+	assert(42 == isl_val_list_n_val(c_val_list));
+	for (int i = 0; i < 42; ++i) {
+		isl_val *val = isl_val_list_get_val(c_val_list, i);
+		assert(i == isl_val_get_num_si(val));
+		isl_val_free(val);
+	}
+
+	c_val_list = isl_val_list_drop(c_val_list, 0, 32);
+	val_list = isl::manage(c_val_list);
+	assert(10 == val_list.size());
+	for (int i = 0; i < 10; ++i) {
+		isl::val expected(ctx, 32 + i);
+		isl::val val_op = val_list[i];
+		assert(val_op.eq(expected));
+	}
+}
+
 /* Test the isl C++ interface
  *
  * This includes:
@@ -389,6 +434,7 @@ void test_id_lifetime(isl::ctx ctx)
  *  - Foreach functions
  *  - isl::id uniqueness
  *  - isl::id lifetime
+ *  - List of isl::val
  */
 int main()
 {
@@ -401,6 +447,7 @@ int main()
 	test_foreach(ctx);
 	test_id(ctx);
 	test_id_lifetime(ctx);
+	test_val_list(ctx);
 
 	isl_ctx_free(ctx);
 }
