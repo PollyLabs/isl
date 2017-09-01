@@ -98,6 +98,7 @@ template <typename T>
 class list_iterator {
   const list<T> *lst;
   int pos;
+  mutable T elementHolder;
 
   inline list_iterator(const list<T> *l, int p);
 
@@ -117,7 +118,7 @@ public:
   inline list_iterator &operator=(const list_iterator<T> &it);
 
   inline reference operator*() const;
-  inline reference operator->() const;
+  inline pointer operator->() const;
   inline list_iterator operator++(int);
   inline list_iterator &operator++();
   inline bool operator==(const list_iterator<T> &it) const;
@@ -139,6 +140,13 @@ list_iterator<T>::list_iterator(const list_iterator<T> &it) :
   lst(it.lst), pos(it.pos) {}
 
 template <typename T>
+list_iterator<T> &list_iterator<T>::operator=(const list_iterator<T> &it) {
+  lst = it.lst;
+  pos = it.pos;
+  return *this;
+}
+
+template <typename T>
 list_iterator<T>::~list_iterator() {}
 
 template <typename T>
@@ -147,8 +155,9 @@ typename list_iterator<T>::reference list_iterator<T>::operator*() const {
 }
 
 template <typename T>
-typename list_iterator<T>::reference list_iterator<T>::operator->() const {
-  return operator*();
+typename list_iterator<T>::pointer list_iterator<T>::operator->() const {
+  elementHolder = lst->at(pos);
+  return &elementHolder;
 }
 
 template <typename T>
