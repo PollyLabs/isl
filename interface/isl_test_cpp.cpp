@@ -314,6 +314,15 @@ void test_foreach(isl::ctx ctx)
 	assert(ret2 == isl::stat::error);
 }
 
+void test_default_ctx() {
+	isl::set S1("{ [1] } ");
+	isl::set S2("{ [2] } ");
+
+	isl::set S12("{ [1] ; [2] } ");
+
+	assert(S1.unite(S2).is_equal(S12));
+}
+
 /* Test the isl C++ interface
  *
  * This includes:
@@ -334,4 +343,6 @@ int main()
 	test_foreach(ctx);
 
 	isl_ctx_free(ctx);
+
+	test_default_ctx();
 }

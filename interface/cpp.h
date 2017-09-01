@@ -38,7 +38,7 @@ private:
 		const string &fullname, const set<FunctionDecl *> &methods);
 	void print_method_decl(ostream &os, const isl_class &clazz,
 		const string &fullname, FunctionDecl *method,
-		function_kind kind);
+		function_kind kind, bool hide_constructor = false);
 	void print_implementations(ostream &os);
 	void print_class_impl(ostream &os, const isl_class &clazz);
 	void print_class_factory_impl(ostream &os, const isl_class &clazz);
@@ -55,12 +55,12 @@ private:
 		const string &fullname, const set<FunctionDecl *> &methods);
 	void print_method_impl(ostream &os, const isl_class &clazz,
 		const string &fullname,	FunctionDecl *method,
-		function_kind kind);
+		function_kind kind, bool hide_constructor = false);
 	void print_method_param_use(ostream &os, ParmVarDecl *param,
 		bool load_from_this_ptr);
 	void print_method_header(ostream &os, const isl_class &clazz,
 		FunctionDecl *method, const string &fullname,
-		bool is_declaration, function_kind kind);
+		bool is_declaration, function_kind kind, bool hide_constructor);
 	string generate_callback_args(QualType type, bool cpp);
 	string generate_callback_type(QualType type);
 	void print_callback_local(ostream &os, ParmVarDecl *param);

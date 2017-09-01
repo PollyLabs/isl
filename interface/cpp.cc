@@ -287,6 +287,9 @@ void cpp_generator::print_constructors_decl(ostream &os,
 		function_kind kind = function_kind_constructor;
 
 		print_method_decl(os, clazz, fullname, cons, kind);
+		if (has_ctx_as_first_argument(cons))
+			print_method_decl(os, clazz, fullname, cons, kind, true);
+
 	}
 }
 
@@ -386,6 +389,8 @@ void cpp_generator::print_method_group_decl(ostream &os, const isl_class &clazz,
 	for (it = methods.begin(); it != methods.end(); ++it) {
 		function_kind kind = get_method_kind(clazz, *it);
 		print_method_decl(os, clazz, fullname, *it, kind);
+		if (has_ctx_as_first_argument(*it))
+		  print_method_decl(os, clazz, fullname, *it, kind, true);
 	}
 }
 
@@ -398,9 +403,10 @@ void cpp_generator::print_method_group_decl(ostream &os, const isl_class &clazz,
  * "kind" specifies the kind of method that should be generated.
  */
 void cpp_generator::print_method_decl(ostream &os, const isl_class &clazz,
-	const string &fullname, FunctionDecl *method, function_kind kind)
+	const string &fullname, FunctionDecl *method, function_kind kind,
+	bool hide_constructor)
 {
-	print_method_header(os, clazz, method, fullname, true, kind);
+	print_method_header(os, clazz, method, fullname, true, kind, hide_constructor);
 }
 
 /* Print implementations for class "clazz" to "os".
@@ -489,6 +495,8 @@ void cpp_generator::print_constructors_impl(ostream &os,
 		function_kind kind = function_kind_constructor;
 
 		print_method_impl(os, clazz, fullname, cons, kind);
+		if (has_ctx_as_first_argument(cons))
+		  print_method_impl(os, clazz, fullname, cons, kind, true);
 	}
 }
 
@@ -586,6 +594,8 @@ void cpp_generator::print_method_group_impl(ostream &os, const isl_class &clazz,
 			osprintf(os, "\n");
 		kind = get_method_kind(clazz, *it);
 		print_method_impl(os, clazz, fullname, *it, kind);
+		if (has_ctx_as_first_argument(*it))
+		  print_method_impl(os, clazz, fullname, *it, kind, true);
 	}
 }
 
@@ -674,7 +684,8 @@ void cpp_generator::print_method_param_use(ostream &os, ParmVarDecl *param,
  * as part of the std::function argument which specifies the callback function.
  */
 void cpp_generator::print_method_impl(ostream &os, const isl_class &clazz,
-	const string &fullname, FunctionDecl *method, function_kind kind)
+	const string &fullname, FunctionDecl *method, function_kind kind,
+	bool hide_constructor)
 {
 	string cname = fullname.substr(clazz.name.length() + 1);
 	string methodname = method->getName();
@@ -683,7 +694,7 @@ void cpp_generator::print_method_impl(ostream &os, const isl_class &clazz,
 	string rettype_str = type2cpp(return_type);
 	bool has_callback = false;
 
-	print_method_header(os, clazz, method, fullname, false, kind);
+	print_method_header(os, clazz, method, fullname, false, kind, hide_constructor);
 
 	for (int i = 0; i < num_params; ++i) {
 		ParmVarDecl *param = method->getParamDecl(i);
@@ -703,7 +714,10 @@ void cpp_generator::print_method_impl(ostream &os, const isl_class &clazz,
 		if (i == 0 && kind == function_kind_member_method)
 			load_from_this_ptr = true;
 
-		print_method_param_use(os, param, load_from_this_ptr);
+		if (i == 0 && hide_constructor)
+			osprintf(os, "ctx::get_default_ctx().get()");
+		else
+			print_method_param_use(os, param, load_from_this_ptr);
 
 		if (i != num_params - 1)
 			osprintf(os, ", ");
@@ -773,7 +787,7 @@ void cpp_generator::print_method_impl(ostream &os, const isl_class &clazz,
  */
 void cpp_generator::print_method_header(ostream &os, const isl_class &clazz,
 	FunctionDecl *method, const string &fullname, bool is_declaration,
-	function_kind kind)
+	function_kind kind, bool hide_constructor)
 {
 	string cname = fullname.substr(clazz.name.length() + 1);
 	string rettype_str = type2cpp(method->getReturnType());
@@ -784,6 +798,11 @@ void cpp_generator::print_method_header(ostream &os, const isl_class &clazz,
 	cname = rename_method(cname);
 	if (kind == function_kind_member_method)
 		first_param = 1;
+
+	if (hide_constructor) {
+		fprintf(stderr, "Test\n");
+		first_param++;
+	}
 
 	if (is_declaration) {
 		osprintf(os, "  ");
