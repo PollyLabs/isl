@@ -111,14 +111,14 @@ static __isl_give isl_union_map *isl_union_map_alloc(
 	return umap;
 }
 
-__isl_give isl_union_map *isl_union_map_empty(__isl_take isl_space *dim)
+__isl_give isl_union_map *isl_union_map_empty(__isl_take isl_space *space)
 {
-	return isl_union_map_alloc(dim, 16);
+	return isl_union_map_alloc(space, 16);
 }
 
-__isl_give isl_union_set *isl_union_set_empty(__isl_take isl_space *dim)
+__isl_give isl_union_set *isl_union_set_empty(__isl_take isl_space *space)
 {
-	return isl_union_map_empty(dim);
+	return isl_union_map_empty(space);
 }
 
 isl_ctx *isl_union_map_get_ctx(__isl_keep isl_union_map *umap)

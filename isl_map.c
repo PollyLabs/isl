@@ -5924,34 +5924,34 @@ error:
 	return NULL;
 }
 
-__isl_give isl_basic_map *isl_basic_map_empty(__isl_take isl_space *dim)
+__isl_give isl_basic_map *isl_basic_map_empty(__isl_take isl_space *space)
 {
 	struct isl_basic_map *bmap;
-	bmap = isl_basic_map_alloc_space(dim, 0, 1, 0);
+	bmap = isl_basic_map_alloc_space(space, 0, 1, 0);
 	bmap = isl_basic_map_set_to_empty(bmap);
 	return bmap;
 }
 
-__isl_give isl_basic_set *isl_basic_set_empty(__isl_take isl_space *dim)
+__isl_give isl_basic_set *isl_basic_set_empty(__isl_take isl_space *space)
 {
 	struct isl_basic_set *bset;
-	bset = isl_basic_set_alloc_space(dim, 0, 1, 0);
+	bset = isl_basic_set_alloc_space(space, 0, 1, 0);
 	bset = isl_basic_set_set_to_empty(bset);
 	return bset;
 }
 
-__isl_give isl_basic_map *isl_basic_map_universe(__isl_take isl_space *dim)
+__isl_give isl_basic_map *isl_basic_map_universe(__isl_take isl_space *space)
 {
 	struct isl_basic_map *bmap;
-	bmap = isl_basic_map_alloc_space(dim, 0, 0, 0);
+	bmap = isl_basic_map_alloc_space(space, 0, 0, 0);
 	bmap = isl_basic_map_finalize(bmap);
 	return bmap;
 }
 
-__isl_give isl_basic_set *isl_basic_set_universe(__isl_take isl_space *dim)
+__isl_give isl_basic_set *isl_basic_set_universe(__isl_take isl_space *space)
 {
 	struct isl_basic_set *bset;
-	bset = isl_basic_set_alloc_space(dim, 0, 0, 0);
+	bset = isl_basic_set_alloc_space(space, 0, 0, 0);
 	bset = isl_basic_set_finalize(bset);
 	return bset;
 }
@@ -5991,33 +5991,33 @@ __isl_give isl_set *isl_set_nat_universe(__isl_take isl_space *dim)
 	return isl_map_nat_universe(dim);
 }
 
-__isl_give isl_map *isl_map_empty(__isl_take isl_space *dim)
+__isl_give isl_map *isl_map_empty(__isl_take isl_space *space)
 {
-	return isl_map_alloc_space(dim, 0, ISL_MAP_DISJOINT);
+	return isl_map_alloc_space(space, 0, ISL_MAP_DISJOINT);
 }
 
-__isl_give isl_set *isl_set_empty(__isl_take isl_space *dim)
+__isl_give isl_set *isl_set_empty(__isl_take isl_space *space)
 {
-	return isl_set_alloc_space(dim, 0, ISL_MAP_DISJOINT);
+	return isl_set_alloc_space(space, 0, ISL_MAP_DISJOINT);
 }
 
-__isl_give isl_map *isl_map_universe(__isl_take isl_space *dim)
+__isl_give isl_map *isl_map_universe(__isl_take isl_space *space)
 {
 	struct isl_map *map;
-	if (!dim)
+	if (!space)
 		return NULL;
-	map = isl_map_alloc_space(isl_space_copy(dim), 1, ISL_MAP_DISJOINT);
-	map = isl_map_add_basic_map(map, isl_basic_map_universe(dim));
+	map = isl_map_alloc_space(isl_space_copy(space), 1, ISL_MAP_DISJOINT);
+	map = isl_map_add_basic_map(map, isl_basic_map_universe(space));
 	return map;
 }
 
-__isl_give isl_set *isl_set_universe(__isl_take isl_space *dim)
+__isl_give isl_set *isl_set_universe(__isl_take isl_space *space)
 {
 	struct isl_set *set;
-	if (!dim)
+	if (!space)
 		return NULL;
-	set = isl_set_alloc_space(isl_space_copy(dim), 1, ISL_MAP_DISJOINT);
-	set = isl_set_add_basic_set(set, isl_basic_set_universe(dim));
+	set = isl_set_alloc_space(isl_space_copy(space), 1, ISL_MAP_DISJOINT);
+	set = isl_set_add_basic_set(set, isl_basic_set_universe(space));
 	return set;
 }
 

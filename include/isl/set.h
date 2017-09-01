@@ -91,8 +91,8 @@ int isl_basic_set_is_rational(__isl_keep isl_basic_set *bset);
 
 __isl_null isl_basic_set *isl_basic_set_free(__isl_take isl_basic_set *bset);
 __isl_give isl_basic_set *isl_basic_set_copy(__isl_keep isl_basic_set *bset);
-__isl_give isl_basic_set *isl_basic_set_empty(__isl_take isl_space *dim);
-__isl_give isl_basic_set *isl_basic_set_universe(__isl_take isl_space *dim);
+__isl_give isl_basic_set *isl_basic_set_empty(__isl_take isl_space *space);
+__isl_give isl_basic_set *isl_basic_set_universe(__isl_take isl_space *space);
 __isl_give isl_basic_set *isl_basic_set_nat_universe(__isl_take isl_space *dim);
 __isl_give isl_basic_set *isl_basic_set_positive_orthant(
 	__isl_take isl_space *space);
@@ -236,8 +236,8 @@ isl_bool isl_basic_set_is_subset(__isl_keep isl_basic_set *bset1,
 isl_bool isl_basic_set_plain_is_equal(__isl_keep isl_basic_set *bset1,
 	__isl_keep isl_basic_set *bset2);
 
-__isl_give isl_set *isl_set_empty(__isl_take isl_space *dim);
-__isl_give isl_set *isl_set_universe(__isl_take isl_space *dim);
+__isl_give isl_set *isl_set_empty(__isl_take isl_space *space);
+__isl_give isl_set *isl_set_universe(__isl_take isl_space *space);
 __isl_give isl_set *isl_set_nat_universe(__isl_take isl_space *dim);
 __isl_give isl_set *isl_set_copy(__isl_keep isl_set *set);
 __isl_null isl_set *isl_set_free(__isl_take isl_set *set);
