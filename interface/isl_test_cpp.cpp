@@ -418,6 +418,60 @@ void test_basic_map_list(isl::ctx ctx)
 	assert(result.is_equal(bmap3));
 }
 
+/* Test if the list iterators are operating properly and whether they are
+ * compatible with the standard library.
+ *
+ * Construct a standard vector from an isl list using list iterators. Check
+ * that the size and content of the vector is equal to the size and content of
+ * the list.
+ *
+ * Check that prefix and postfix increments of the iterators are implemented
+ * correctly.
+ */
+void test_list_iterators(isl::ctx ctx)
+{
+	std::vector<isl::val> val_vector;
+	for (int i = 0; i < 42; ++i) {
+		isl::val val(ctx, i);
+		val_vector.push_back(val);
+	}
+	isl::list<isl::val> val_list(ctx, val_vector.begin(),
+		val_vector.end());
+
+	std::vector<isl::val> other_val_vector;
+	other_val_vector.resize(42);
+	std::copy(val_list.begin(), val_list.end(), other_val_vector.begin());
+
+	assert(42 == other_val_vector.size());
+	for (int i = 0; i < 42; ++i) {
+		isl::val expected(ctx, i);
+		assert(expected.eq(other_val_vector[i]));
+	}
+
+	isl::list<isl::val>::iterator it = val_list.begin();
+	for (int i = 0; i < 42; ++i) {
+		isl::val expected(ctx, i);
+		assert(it != val_list.end());
+		assert(it->eq(expected));
+		assert((*it).eq(expected));
+		++it;
+	}
+
+	it = val_list.begin();
+	isl::list<isl::val>::iterator it2 = val_list.begin();
+	++it2;
+	assert(it++ != it2);
+	assert(it++ == it2);
+	assert(it != it2);
+
+	it = val_list.begin();
+	it2 = val_list.begin();
+	++it2;
+	assert(++it == it2);
+	assert(++it == ++it2);
+	assert(++it != it2);
+}
+
 /* Test the isl C++ interface
  *
  * This includes:
@@ -429,6 +483,7 @@ void test_basic_map_list(isl::ctx ctx)
  *  - Identifier allocation and equality
  *  - List of isl::val
  *  - Custom function of the list of isl::basic_map
+ *  - List iterators
  */
 int main()
 {
@@ -442,6 +497,7 @@ int main()
 	test_id(ctx);
 	test_val_list(ctx);
 	test_basic_map_list(ctx);
+	test_list_iterators(ctx);
 
 	isl_ctx_free(ctx);
 }
