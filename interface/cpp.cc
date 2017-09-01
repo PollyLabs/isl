@@ -417,6 +417,28 @@ void cpp_generator::print_methods_decl(ostream &os, const isl_class &clazz)
 		print_method_group_decl(os, clazz, it->first, it->second);
 }
 
+/* Print declarations for custom members of a class "clazz" to "os", based on
+ * the class type.
+ */
+void cpp_generator::print_custom_public_decl(ostream &os,
+	const isl_class &clazz)
+{
+	if (is_list_type(clazz)) {
+		const char *declarations =
+			"  template <typename InputIt1, typename InputIt2>\n"
+			"  inline list(isl::ctx ctx, InputIt1 from, "
+			"InputIt2 to);\n\n"
+			"  inline int size() const;\n";
+		string element_string = type2cpp(list_element_type_name(clazz));
+		const char *element_type = element_string.c_str();
+
+		osprintf(os, "%s", declarations);
+		osprintf(os, "  inline %s at(int pos) const;\n", element_type);
+		osprintf(os, "  inline %s operator[](int pos) const;\n",
+			element_type);
+	}
+}
+
 /* Print declarations for methods "methods" of name "fullname" in class "clazz"
  * to "os".
  *
@@ -515,7 +537,6 @@ void cpp_generator::print_private_constructors_impl(ostream &os,
 void cpp_generator::print_public_constructors_impl(ostream &os,
 	const isl_class &clazz)
 {
-	const char *name = clazz.name.c_str();
 	std::string cppstring = type2cpp(clazz);
 	const char *cppname = cppstring.c_str();
 	std::string constructor_string =
@@ -616,6 +637,56 @@ void cpp_generator::print_methods_impl(ostream &os, const isl_class &clazz)
 		else
 			osprintf(os, "\n");
 		print_method_group_impl(os, clazz, it->first, it->second);
+	}
+}
+
+/* Print definitions for custom methods of class "clazz" to "os", based on the
+ * class type.
+ */
+void cpp_generator::print_custom_methods_impl(ostream &os,
+	const isl_class &clazz)
+{
+	string name = type2cpp(clazz);
+	const char *cname = name.c_str();
+	if (is_list_type(clazz)) {
+		string element_string = list_element_type_name(clazz);
+		const char *element_type = element_string.c_str();
+		string element_string_noprefix = element_string.substr(4);
+		const char *element_name = element_string_noprefix.c_str();
+		string element_cppstring = type2cpp(element_string);
+		const char *element_cpptype = element_cppstring.c_str();
+
+		osprintf(os,
+			"template <typename InputIt1, typename InputIt2>\n");
+		osprintf(os, "%s::list(isl::ctx ctx, InputIt1 from, "
+			"InputIt2 to) {\n", cname);
+		osprintf(os,
+			"  ptr = %s_list_alloc(ctx.get(), ", element_type);
+		osprintf(os, "std::distance(from, to));\n");
+		osprintf(os, "  for ( ; from != to; ++from) {\n");
+		osprintf(os, "    ptr = %s_list_add(ptr, from->copy());\n",
+			element_type);
+		osprintf(os, "  }\n");
+		osprintf(os, "}\n\n");
+
+		osprintf(os, "int %s::size() const {\n", cname);
+		osprintf(os, "  return %s_list_n_%s(ptr);\n", element_type,
+			element_name);
+		osprintf(os, "}\n\n");
+
+		osprintf(os, "isl::%s %s::at(int pos) const {\n", element_cpptype,
+			cname);
+		osprintf(os, "  ISLPP_ASSERT(pos >= 0 && pos < size(),\n");
+		osprintf(os, "               \"position out of range\");\n");
+		osprintf(os, "  return manage(%s_list_get_%s(ptr, pos));\n",
+			element_type, element_name);
+		osprintf(os, "}\n\n");
+
+		osprintf(os, "isl::%s %s::operator[](int pos) const {\n",
+			element_cpptype, cname);
+		osprintf(os, "  return manage(%s_list_get_%s(ptr, pos));\n",
+			element_type, element_name);
+		osprintf(os, "}\n\n");
 	}
 }
 
@@ -1180,6 +1251,11 @@ bool cpp_generator::is_list_type(const isl_class &clazz)
 string cpp_generator::list_element_type_name(QualType type)
 {
 	return list_types.at(type->getPointeeType().getAsString());
+}
+
+string cpp_generator::list_element_type_name(const isl_class &clazz)
+{
+	return list_types.at(clazz.name);
 }
 
 string cpp_generator::instance_type(const string &type_string)
