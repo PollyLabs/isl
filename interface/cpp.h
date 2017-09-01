@@ -4,11 +4,13 @@ using namespace std;
 using namespace clang;
 
 class cpp_generator : public generator {
+protected:
+	map<string, string> list_types;
+
 public:
 	cpp_generator(set<RecordDecl *> &exported_types,
 		set<FunctionDecl *> exported_functions,
-		set<FunctionDecl *> functions) :
-		generator(exported_types, exported_functions, functions) {}
+		set<FunctionDecl *> functions);
 
 	enum function_kind {
 		function_kind_static_method,
@@ -21,7 +23,10 @@ private:
 	void print_file(ostream &os, std::string filename);
 	void print_forward_declarations(ostream &os);
 	void print_declarations(ostream &os);
+	void print_common_class_body(ostream &os, const isl_class &clazz,
+		bool is_template_specialization = false);
 	void print_class(ostream &os, const isl_class &clazz);
+	void print_list_specialization(ostream &os, const isl_class &clazz);
 	void print_class_forward_decl(ostream &os, const isl_class &clazz);
 	void print_class_factory_decl(ostream &os, const isl_class &clazz,
 		const std::string &prefix = std::string());
@@ -74,4 +79,8 @@ private:
 	bool is_subclass(QualType subclass_type, const isl_class &class_type);
 	function_kind get_method_kind(const isl_class &clazz,
 		FunctionDecl *method);
+	bool is_list_type(QualType type);
+	bool is_list_type(const isl_class &clazz);
+	string list_element_type_name(QualType type);
+	string instance_type(const string &type_string);
 };
