@@ -314,6 +314,133 @@ void test_foreach(isl::ctx ctx)
 	assert(ret2 == isl::stat::error);
 }
 
+/* Test that ids are handled correctly and remain unique.
+ *
+ * Verify that id names are stored and returned correctly. Check that ids with
+ * identical names are equal and those with different names are different.
+ * Check that ids with identical names and different user pointers are
+ * different. Verify that equality holds across ids constructed from C and C++
+ * interfaces.
+ */
+void test_id(isl::ctx ctx)
+{
+	isl::id id_whatever(ctx, std::string("whatever"));
+	assert(id_whatever.has_name());
+	assert(std::string("whatever") == id_whatever.get_name());
+
+	isl::id id_other(ctx, std::string("whatever"));
+	assert(id_whatever == id_other);
+
+	int fourtytwo = 42;
+	isl::id id_whatever_42(ctx, std::string("whatever"), &fourtytwo);
+	assert(id_whatever != id_whatever_42);
+
+	isl::id id_whatever_42_copy(id_whatever_42);
+	assert(id_whatever_42 == id_whatever_42_copy);
+
+	isl::id id_whatever_42_other(ctx, std::string("whatever"), &fourtytwo);
+	assert(id_whatever_42 == id_whatever_42_other);
+
+	isl_id *cid = isl_id_alloc(ctx.get(), "whatever", &fourtytwo);
+	assert(cid == id_whatever_42.get());
+	isl_id_free(cid);
+}
+
+static void reset_flag(void *user) {
+	*static_cast<int *>(user) = 0;
+}
+
+/* Test that user pointers of the ids are not freed as long as the exists at
+ * least one id pointing to them, either in C or C++.
+ *
+ * In a scope, create an id with a flag as a user object and a user_free that
+ * resets the flag. Use the id in a set object that lives outside the given
+ * scope. Check that flag is still set after the id object went out of the
+ * scope. Check that flag is reset after the set object went of of scope.
+ */
+void test_id_lifetime(isl::ctx ctx)
+{
+	int *flag = new int(1);
+
+	{
+		isl::set set(ctx, "{:}");
+		{
+			isl::id id(ctx, std::string("whatever"), flag,
+				&reset_flag);
+			set = set.set_tuple_id(id);
+		}
+		assert(1 == *flag);
+		assert(set.has_tuple_id());
+
+		isl::id same_id(ctx, std::string("whatever"), flag);
+		assert(set.get_tuple_id() == same_id);
+	}
+	assert(0 == *flag);
+	delete flag;
+}
+
+/* Test that read-only list of vals are modeled correctly.
+ *
+ * Construct an std::vector of isl::vals and use its iterators to construct a
+ * C++ isl list of vals. Compare these containers. Extract the C isl list from
+ * the C++ one, verify that is has expected size and content. Modify the C isl
+ * list and convert it back to C++. Verify that the new managed list has
+ * expected content.
+ */
+void test_val_list(isl::ctx ctx)
+{
+	std::vector<isl::val> val_vector;
+	for (int i = 0; i < 42; ++i) {
+		isl::val val(ctx, i);
+		val_vector.push_back(val);
+	}
+	isl::list<isl::val> val_list(ctx, val_vector.begin(),
+		val_vector.end());
+
+	assert(42 == val_list.size());
+	for (int i = 0; i < 42; ++i) {
+		isl::val val_at = val_list.at(i);
+		isl::val val_op = val_list[i];
+		isl::val expected(ctx, i);
+		assert(val_at.eq(expected));
+		assert(val_op.eq(expected));
+	}
+
+	isl_val_list *c_val_list = val_list.release();
+	assert(42 == isl_val_list_n_val(c_val_list));
+	for (int i = 0; i < 42; ++i) {
+		isl_val *val = isl_val_list_get_val(c_val_list, i);
+		assert(i == isl_val_get_num_si(val));
+		isl_val_free(val);
+	}
+
+	c_val_list = isl_val_list_drop(c_val_list, 0, 32);
+	val_list = isl::manage(c_val_list);
+	assert(10 == val_list.size());
+	for (int i = 0; i < 10; ++i) {
+		isl::val expected(ctx, 32 + i);
+		isl::val val_op = val_list[i];
+		assert(val_op.eq(expected));
+	}
+}
+
+/* Test that supplementary functions on lists are handled properly.
+ *
+ * Construct a list of basic_maps from an array thereof. Compute the
+ * interaction of all basic_map in the list.
+ */
+void test_basic_map_list(isl::ctx ctx)
+{
+	isl::basic_map bmap1(ctx, "{[]->[a]: 0 <= a <= 42}");
+	isl::basic_map bmap2(ctx, "{[]->[a]: 21 <= a <= 63}");
+	isl::basic_map bmap3(ctx, "{[]->[a]: 21 <= a <= 42}");
+
+	isl::basic_map bmap_array[] = { bmap1, bmap2, bmap3 };
+	isl::list<isl::basic_map> bmap_list(ctx, bmap_array, bmap_array + 3);
+	isl::basic_map result = bmap_list.intersect();
+	assert(result.is_equal(bmap3));
+}
+
 /* Test the isl C++ interface
  *
  * This includes:
@@ -322,6 +449,10 @@ void test_foreach(isl::ctx ctx)
  *  - Different parameter types
  *  - Different return types
  *  - Foreach functions
+ *  - isl::id uniqueness
+ *  - isl::id lifetime
+ *  - List of isl::val
+ *  - Custom function of the list of isl::basic_map
  */
 int main()
 {
@@ -332,6 +463,10 @@ int main()
 	test_parameters(ctx);
 	test_return(ctx);
 	test_foreach(ctx);
+	test_id(ctx);
+	test_id_lifetime(ctx);
+	test_val_list(ctx);
+	test_basic_map_list(ctx);
 
 	isl_ctx_free(ctx);
 }

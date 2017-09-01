@@ -91,5 +91,8 @@ enum class stat {
   error = isl_stat_error
 };
 
+template <typename T>
+class list;
+
 }
 } // namespace isl

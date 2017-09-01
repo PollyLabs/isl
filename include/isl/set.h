@@ -75,10 +75,13 @@ isl_bool isl_set_has_dim_id(__isl_keep isl_set *set,
 	enum isl_dim_type type, unsigned pos);
 __isl_give isl_id *isl_set_get_dim_id(__isl_keep isl_set *set,
 	enum isl_dim_type type, unsigned pos);
+__isl_export
 __isl_give isl_set *isl_set_set_tuple_id(__isl_take isl_set *set,
 	__isl_take isl_id *id);
 __isl_give isl_set *isl_set_reset_tuple_id(__isl_take isl_set *set);
+__isl_export
 isl_bool isl_set_has_tuple_id(__isl_keep isl_set *set);
+__isl_export
 __isl_give isl_id *isl_set_get_tuple_id(__isl_keep isl_set *set);
 __isl_give isl_set *isl_set_reset_user(__isl_take isl_set *set);
 

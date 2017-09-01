@@ -428,6 +428,7 @@ int main(int argc, char *argv[])
 	    "__attribute__((annotate(\"isl_export\")))");
 	PO.addMacroDef("__isl_constructor=__attribute__((annotate(\"isl_constructor\"))) __attribute__((annotate(\"isl_export\")))");
 	PO.addMacroDef("__isl_subclass(super)=__attribute__((annotate(\"isl_subclass(\" #super \")\"))) __attribute__((annotate(\"isl_export\")))");
+	PO.addMacroDef("__isl_list(elem)=__attribute__((annotate(\"isl_list(\" #elem \")\"))) __attribute__((annotate(\"isl_export\")))");
 
 	create_preprocessor(Clang);
 	Preprocessor &PP = Clang->getPreprocessor();
