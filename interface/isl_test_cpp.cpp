@@ -401,6 +401,23 @@ void test_val_list(isl::ctx ctx)
 	}
 }
 
+/* Test that supplementary functions on lists are handled properly.
+ *
+ * Construct a list of basic_maps from an array thereof. Compute the
+ * interaction of all basic_map in the list.
+ */
+void test_basic_map_list(isl::ctx ctx)
+{
+	isl::basic_map bmap1(ctx, "{[]->[a]: 0 <= a <= 42}");
+	isl::basic_map bmap2(ctx, "{[]->[a]: 21 <= a <= 63}");
+	isl::basic_map bmap3(ctx, "{[]->[a]: 21 <= a <= 42}");
+
+	isl::basic_map bmap_array[] = { bmap1, bmap2, bmap3 };
+	isl::list<isl::basic_map> bmap_list(ctx, bmap_array, bmap_array + 3);
+	isl::basic_map result = bmap_list.intersect();
+	assert(result.is_equal(bmap3));
+}
+
 /* Test the isl C++ interface
  *
  * This includes:
@@ -411,6 +428,7 @@ void test_val_list(isl::ctx ctx)
  *  - Foreach functions
  *  - Identifier allocation and equality
  *  - List of isl::val
+ *  - Custom function of the list of isl::basic_map
  */
 int main()
 {
@@ -423,6 +441,7 @@ int main()
 	test_foreach(ctx);
 	test_id(ctx);
 	test_val_list(ctx);
+	test_basic_map_list(ctx);
 
 	isl_ctx_free(ctx);
 }
