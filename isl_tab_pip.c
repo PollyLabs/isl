@@ -5410,6 +5410,22 @@ static void clear_lexmin_data(struct isl_lexmin_data *data)
 	isl_tab_free(data->tab);
 }
 
+static void dump_regions(int n_region, struct isl_ilp_region *region)
+	__attribute__ ((unused));
+
+/* Dump information about the "n_region" regions starting at "region".
+ */
+static void dump_regions(int n_region, struct isl_ilp_region *region)
+{
+	int i;
+
+	for (i = 0; i < n_region; ++i) {
+		fprintf(stderr, "%d (%d):\n", i, region[i].pos);
+		fprintf(stderr, "non_zero\n");
+		isl_mat_dump(region[i].non_zero);
+	}
+}
+
 /* Return the lexicographically smallest solution of the given ILP problem
  * that satisfies a sequence of constraints.
  *
