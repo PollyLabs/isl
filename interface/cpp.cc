@@ -430,10 +430,14 @@ void cpp_generator::print_custom_public_decl(ostream &os,
 			"  template <typename InputIt1, typename InputIt2>\n"
 			"  inline list(isl::ctx ctx, InputIt1 from, "
 			"InputIt2 to);\n\n"
-			"  inline int size() const;\n";
+			"  inline int size() const;\n"
+			"  iterator begin() const;\n"
+			"  iterator end() const;\n";
 		string element_string = type2cpp(list_element_type_name(clazz));
 		const char *element_type = element_string.c_str();
 
+		osprintf(os, "  typedef list_iterator<%s> iterator;\n",
+			element_type);
 		osprintf(os, "%s", declarations);
 		osprintf(os, "  inline %s at(int pos) const;\n", element_type);
 		osprintf(os, "  inline %s operator[](int pos) const;\n",
@@ -704,6 +708,18 @@ void cpp_generator::print_custom_methods_impl(ostream &os,
 			element_cpptype, cname);
 		osprintf(os, "  return manage(%s_list_get_%s(ptr, pos));\n",
 			element_type, element_name);
+		osprintf(os, "}\n\n");
+
+		osprintf(os, "typename isl::%s::iterator\n", cname);
+		osprintf(os, "%s::begin() const {\n", cname);
+		osprintf(os, "  return list_iterator<%s>(this, 0);\n",
+			element_cpptype);
+		osprintf(os, "}\n\n");
+
+		osprintf(os, "typename isl::%s::iterator\n", cname);
+		osprintf(os, "%s::end() const {\n", cname);
+		osprintf(os, "  return list_iterator<%s>(this, -1);\n",
+			element_cpptype);
 		osprintf(os, "}\n\n");
 	} else if ("id" == name) {
 		const char *definitions =

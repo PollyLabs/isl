@@ -94,5 +94,91 @@ enum class stat {
 template <typename T>
 class list;
 
+template <typename T>
+class list_iterator {
+  const list<T> *lst;
+  int pos;
+
+  inline list_iterator(const list<T> *l, int p);
+
+  friend list_iterator list<T>::begin() const;
+  friend list_iterator list<T>::end() const;
+
+public:
+  typedef T value_type;
+  typedef int difference_type;
+  typedef std::input_iterator_tag iterator_category;
+  typedef const T *pointer;
+  typedef T reference;
+
+  inline list_iterator();
+  inline list_iterator(const list_iterator<T> &it);
+  inline ~list_iterator();
+  inline list_iterator &operator=(const list_iterator<T> &it);
+
+  inline reference operator*() const;
+  inline reference operator->() const;
+  inline list_iterator operator++(int);
+  inline list_iterator &operator++();
+  inline bool operator==(const list_iterator<T> &it) const;
+  inline bool operator!=(const list_iterator<T> &it) const;
+
+  static inline void swap(list_iterator<T> &it1, list_iterator<T> &it2);
+};
+
+template <typename T>
+list_iterator<T>::list_iterator(const list<T> *l, int p) :
+  lst(l), pos(p) {}
+
+template <typename T>
+list_iterator<T>::list_iterator() :
+  lst(nullptr), pos(-1) {}
+
+template <typename T>
+list_iterator<T>::list_iterator(const list_iterator<T> &it) :
+  lst(it.lst), pos(it.pos) {}
+
+template <typename T>
+list_iterator<T>::~list_iterator() {}
+
+template <typename T>
+typename list_iterator<T>::reference list_iterator<T>::operator*() const {
+  return lst->at(pos);
+}
+
+template <typename T>
+typename list_iterator<T>::reference list_iterator<T>::operator->() const {
+  return operator*();
+}
+
+template <typename T>
+list_iterator<T> list_iterator<T>::operator++(int) {
+  list_iterator<T> it = *this;
+  ++*this;
+  return it;
+}
+
+template <typename T>
+list_iterator<T> &list_iterator<T>::operator++() {
+  if (pos == -1 || !lst || pos >= lst->size() - 1)
+    pos = -1;
+  else
+    ++pos;
+
+  return *this;
+}
+
+template <typename T>
+bool list_iterator<T>::operator==(const list_iterator<T> &it) const {
+  ISLPP_ASSERT(lst == it.lst,
+               "cannot compare iterators from different containers");
+  return pos == it.pos;
+}
+
+template <typename T>
+bool list_iterator<T>::operator!=(const list_iterator<T> &it) const {
+  return !(*this == it);
+}
+
 }
 } // namespace isl
