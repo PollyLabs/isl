@@ -2843,35 +2843,35 @@ static int needs_row(struct isl_sched_graph *graph, struct isl_sched_node *node)
 	return node->nvar - node->rank >= graph->maxvar - graph->n_row;
 }
 
-/* Construct a non-triviality region with triviality directions
- * corresponding to the rows of "indep".
- * The rows of "indep" are expressed in terms of the schedule coefficients c_i,
- * while the triviality directions are expressed in terms of
+/* Take a linear combination "lin" in terms of the schedule coefficients c_i
+ * and express it in terms of the variables of the ILP problem
+ * as constructed by setup_lp.
+ * In particular, in the ILP, the schedule coefficients are represented by
  * pairs of non-negative variables c^+_i - c^-_i, with c^-_i appearing
  * before c^+_i.  Furthermore,
  * the pairs of non-negative variables representing the coefficients
  * are stored in the opposite order.
  */
-static __isl_give isl_mat *construct_trivial(__isl_keep isl_mat *indep)
+static __isl_give isl_mat *linear_to_lp(__isl_keep isl_mat *lin)
 {
 	isl_ctx *ctx;
 	isl_mat *mat;
 	int i, j, n, n_var;
 
-	if (!indep)
+	if (!lin)
 		return NULL;
 
-	ctx = isl_mat_get_ctx(indep);
-	n = isl_mat_rows(indep);
-	n_var = isl_mat_cols(indep);
+	ctx = isl_mat_get_ctx(lin);
+	n = isl_mat_rows(lin);
+	n_var = isl_mat_cols(lin);
 	mat = isl_mat_alloc(ctx, n, 2 * n_var);
 	if (!mat)
 		return NULL;
 	for (i = 0; i < n; ++i) {
 		for (j = 0; j < n_var; ++j) {
 			int nj = n_var - 1 - j;
-			isl_int_neg(mat->row[i][2 * nj], indep->row[i][j]);
-			isl_int_set(mat->row[i][2 * nj + 1], indep->row[i][j]);
+			isl_int_neg(mat->row[i][2 * nj], lin->row[i][j]);
+			isl_int_set(mat->row[i][2 * nj + 1], lin->row[i][j]);
 		}
 	}
 
@@ -2897,7 +2897,7 @@ static __isl_give isl_vec *solve_lp(isl_ctx *ctx, struct isl_sched_graph *graph)
 
 		graph->region[i].pos = node_var_coef_offset(node);
 		if (needs_row(graph, node))
-			trivial = construct_trivial(node->indep);
+			trivial = linear_to_lp(node->indep);
 		else
 			trivial = isl_mat_zero(ctx, 0, 0);
 		graph->region[i].trivial = trivial;
