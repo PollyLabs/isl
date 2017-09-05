@@ -42,6 +42,14 @@ const char *isl_id_get_name(__isl_keep isl_id *id)
 	return id ? id->name : NULL;
 }
 
+isl_bool isl_id_has_name(__isl_keep isl_id *id)
+{
+	if (!id)
+		return isl_bool_error;
+
+	return id->name ? isl_bool_true : isl_bool_false;
+}
+
 static __isl_give isl_id *id_alloc(isl_ctx *ctx, const char *name, void *user)
 {
 	const char *copy = name ? strdup(name) : NULL;
@@ -120,6 +128,16 @@ __isl_give isl_id *isl_id_alloc(isl_ctx *ctx, const char *name, void *user)
 	if (!entry->data)
 		ctx->id_table.n--;
 	return entry->data;
+}
+
+/* Construct an isl_id with a given "name" and a NULL user field.
+ */
+__isl_give isl_id *isl_id_from_name(isl_ctx *ctx, const char *name)
+{
+	if (!name)
+		return NULL;
+
+	return isl_id_alloc(ctx, name, NULL);
 }
 
 /* If the id has a negative refcount, then it is a static isl_id
