@@ -314,6 +314,48 @@ void test_foreach(isl::ctx ctx)
 	assert(ret2 == isl::stat::error);
 }
 
+/* Test that identifiers are constructed correctly and their uniqueness
+ * property holds for both C and C++ interfaces.
+ *
+ * Verify that two identifiers with the same name and same user pointer are
+ * pointer-equal independently of how they were allocated. Check that
+ * identifier with an empty name is not equal to an identifier with a NULL
+ * name.
+ */
+void test_id(isl::ctx ctx)
+{
+	isl::id id1(ctx, "whatever");
+	isl::id id2(ctx, "whatever");
+	isl_id *id3 = isl_id_alloc(ctx.get(), "whatever", NULL);
+	int dummy;
+	isl_id *id4 = isl_id_alloc(ctx.get(), "whatever", &dummy);
+
+	assert(id1.get() == id2.get());
+	assert(id1.get() == id3);
+	assert(id2.get() == id3);
+	assert(id3 != id4);
+	assert(id1.get() != id4);
+
+	isl::id id5 = isl::manage(id3);
+	isl::id id6 = isl::manage(id4);
+	assert(id5.get() == id1.get());
+
+	assert(id1.has_name());
+	assert(id5.has_name());
+	assert(id6.has_name());
+	assert("whatever" == id1.get_name());
+	assert("whatever" == id5.get_name());
+	assert("whatever" == id6.get_name());
+
+	isl_id *nameless = isl_id_alloc(ctx.get(), NULL, &dummy);
+	isl::id id7 = isl::manage(nameless);
+	assert(!id7.has_name());
+
+	isl::id id8(ctx, "");
+	assert(id8.has_name());
+	assert(id8.get() != id7.get());
+}
+
 /* Test the isl C++ interface
  *
  * This includes:
@@ -322,6 +364,7 @@ void test_foreach(isl::ctx ctx)
  *  - Different parameter types
  *  - Different return types
  *  - Foreach functions
+ *  - Identifier allocation and equality
  */
 int main()
 {
@@ -332,6 +375,7 @@ int main()
 	test_parameters(ctx);
 	test_return(ctx);
 	test_foreach(ctx);
+	test_id(ctx);
 
 	isl_ctx_free(ctx);
 }
