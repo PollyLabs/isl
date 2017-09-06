@@ -429,8 +429,8 @@ void cpp_generator::print_custom_public_decl(ostream &os,
 			"  inline list(isl::ctx ctx, InputIt1 from, "
 			"InputIt2 to);\n\n"
 			"  inline int size() const;\n"
-			"  iterator begin() const;\n"
-			"  iterator end() const;\n";
+			"  inline iterator begin() const;\n"
+			"  inline iterator end() const;\n";
 		string element_string = type2cpp(list_element_type_name(clazz));
 		const char *element_type = element_string.c_str();
 
@@ -499,6 +499,8 @@ void cpp_generator::print_class_impl(ostream &os, const isl_class &clazz)
 	print_ptr_impl(os, clazz);
 	osprintf(os, "\n");
 	print_methods_impl(os, clazz);
+	osprintf(os, "\n");
+	print_custom_methods_impl(os, clazz);
 }
 
 /* Print implementation of global factory function to "os".
