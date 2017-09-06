@@ -101,6 +101,9 @@ enum isl_sched_intra_state {
 /* A linked list of intra-statement consecutivity constraints
  * for a particular statement.
  *
+ * "id" is the tuple identifier of the isl_multi_aff from
+ * which the constraint is derived.  It may be NULL if the isl_multi_aff
+ * did not have a tuple identifier.
  * "outer": the rows that should be covered by the outer part of the schedule.
  * "inner": the desired inner schedule rows.
  * "n_inner": the number of rows in "inner".
@@ -119,6 +122,7 @@ enum isl_sched_intra_state {
  * "next": next constraint in the linked list.
  */
 struct isl_sched_intra {
+	isl_id *id;
 	isl_mat *outer;
 	isl_mat *inner;
 	int n_inner;
@@ -842,6 +846,7 @@ static void clear_node(struct isl_sched_graph *graph,
 		struct isl_sched_intra *intra = node->intra;
 
 		node->intra = intra->next;
+		isl_id_free(intra->id);
 		isl_mat_free(intra->outer);
 		isl_mat_free(intra->inner);
 		free(intra);
@@ -1511,13 +1516,15 @@ error:
 }
 
 /* Insert an intra-statement consecutivity constraint with
+ * identifier "id" (may be NULL),
  * outer part "outer" and inner part "inner" in front of the list of
  * intra-statement consecutivity constraints of "node".
  * "outer" is replaced by a basis because only the spanned
  * space is relevant and not the individual rows.
  */
 static isl_stat insert_intra(struct isl_sched_node *node,
-	__isl_take isl_mat *outer, __isl_take isl_mat *inner)
+	__isl_take isl_id *id, __isl_take isl_mat *outer,
+	__isl_take isl_mat *inner)
 {
 	isl_ctx *ctx;
 	struct isl_sched_intra *intra;
@@ -1531,12 +1538,14 @@ static isl_stat insert_intra(struct isl_sched_node *node,
 	if (!intra)
 		goto error;
 	intra->n_inner = isl_mat_rows(inner);
+	intra->id = id;
 	intra->outer = outer;
 	intra->inner = inner;
 	intra->next = node->intra;
 	node->intra = intra;
 	return isl_stat_ok;
 error:
+	isl_id_free(id);
 	isl_mat_free(outer);
 	isl_mat_free(inner);
 	return isl_stat_error;
@@ -1586,12 +1595,14 @@ static isl_bool valid_intra(__isl_keep isl_mat *lin, __isl_keep isl_mat *outer,
 }
 
 /* Insert the intra-statement consecutivity constraint "lin"
- * with outer part "outer" in front of the list of
+ * with identifier "id" (may be NULL) and
+ * outer part "outer" in front of the list of
  * intra-statement consecutivity constraints of "node",
  * provided it is a valid constraint.
  */
 static isl_stat insert_valid_intra(struct isl_sched_node *node,
-	__isl_take isl_mat *lin, __isl_take isl_mat *outer)
+	__isl_take isl_id *id, __isl_take isl_mat *lin,
+	__isl_take isl_mat *outer)
 {
 	isl_bool valid;
 
@@ -1602,9 +1613,10 @@ static isl_stat insert_valid_intra(struct isl_sched_node *node,
 
 		n_outer = isl_mat_rows(outer);
 		inner = isl_mat_drop_rows(lin, 0, n_outer);
-		return insert_intra(node, outer, inner);
+		return insert_intra(node, id, outer, inner);
 	}
 
+	isl_id_free(id);
 	isl_mat_free(lin);
 	isl_mat_free(outer);
 	return valid >= 0 ? isl_stat_ok : isl_stat_error;
@@ -1621,10 +1633,13 @@ static isl_stat insert_valid_intra(struct isl_sched_node *node,
  * of the compressed domain,
  * extract the linear parts and store them in "node",
  * provided they represent a valid constraint.
+ * If "ma" has a tuple identifier, then keep track of it as well.
  */
 static isl_stat node_insert_intra(struct isl_sched_node *node,
 	__isl_take isl_multi_aff *ma)
 {
+	isl_bool has_id;
+	isl_id *id;
 	isl_space *space;
 	isl_mat *lin, *outer;
 	int n_outer, n_inner;
@@ -1637,12 +1652,23 @@ static isl_stat node_insert_intra(struct isl_sched_node *node,
 	if (!space)
 		goto error;
 
+	has_id = isl_multi_aff_has_tuple_id(ma, isl_dim_out);
+	if (has_id < 0)
+		goto error;
+	if (!has_id) {
+		id = NULL;
+	} else {
+		id = isl_multi_aff_get_tuple_id(ma, isl_dim_out);
+		if (!id)
+			goto error;
+	}
+
 	if (node->compressed)
 		ma = isl_multi_aff_pullback_multi_aff(ma,
 					isl_multi_aff_copy(node->decompress));
 	lin = extract_linear(ma);
 	outer = isl_mat_drop_rows(isl_mat_copy(lin), n_outer, n_inner);
-	return insert_valid_intra(node, lin, outer);
+	return insert_valid_intra(node, id, lin, outer);
 error:
 	isl_multi_aff_free(ma);
 	return isl_stat_error;
