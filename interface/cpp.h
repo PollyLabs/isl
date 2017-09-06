@@ -39,6 +39,7 @@ private:
 	void print_destructor_decl(ostream &os, const isl_class &clazz);
 	void print_ptr_decl(ostream &os, const isl_class &clazz);
 	void print_methods_decl(ostream &os, const isl_class &clazz);
+	void print_custom_public_decl(ostream &os, const isl_class &clazz);
 	void print_method_group_decl(ostream &os, const isl_class &clazz,
 		const string &fullname, const set<FunctionDecl *> &methods);
 	void print_method_decl(ostream &os, const isl_class &clazz,
@@ -56,6 +57,7 @@ private:
 	void print_destructor_impl(ostream &os, const isl_class &clazz);
 	void print_ptr_impl(ostream &os, const isl_class &clazz);
 	void print_methods_impl(ostream &os, const isl_class &clazz);
+	void print_custom_methods_impl(ostream &os, const isl_class &clazz);
 	void print_method_group_impl(ostream &os, const isl_class &clazz,
 		const string &fullname, const set<FunctionDecl *> &methods);
 	void print_method_impl(ostream &os, const isl_class &clazz,
