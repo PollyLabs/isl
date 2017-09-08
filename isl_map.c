@@ -130,7 +130,7 @@ unsigned isl_basic_set_offset(__isl_keep isl_basic_set *bset,
 	return isl_basic_map_offset(bset, type);
 }
 
-static unsigned isl_map_offset(__isl_keep isl_map *map, enum isl_dim_type type)
+unsigned isl_map_offset(__isl_keep isl_map *map, enum isl_dim_type type)
 {
 	return pos(map->dim, type);
 }
