@@ -13413,7 +13413,8 @@ __isl_give isl_set *isl_set_preimage_multi_pw_aff(__isl_take isl_set *set,
 	return isl_map_preimage_multi_pw_aff(set, isl_dim_set, mpa);
 }
 
-/* Return a copy of the equality constraints of "bset" as a matrix.
+/* Return a (borrowed) copy of the equality constraints of "bset" as a matrix.
+ * The returned object is invalidated by any change to "bset".
  */
 __isl_give isl_mat *isl_basic_set_extract_equalities(
 	__isl_keep isl_basic_set *bset)
