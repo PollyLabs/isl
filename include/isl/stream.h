@@ -78,6 +78,8 @@ __isl_give isl_val *isl_stream_read_val(__isl_keep isl_stream *s);
 __isl_give isl_multi_aff *isl_stream_read_multi_aff(__isl_keep isl_stream *s);
 __isl_give isl_multi_aff_list *isl_stream_read_multi_aff_list(
 	__isl_keep isl_stream *s);
+__isl_give isl_multi_union_pw_aff *isl_stream_read_multi_union_pw_aff(
+	__isl_keep isl_stream *s);
 __isl_give isl_map *isl_stream_read_map(__isl_keep isl_stream *s);
 __isl_give isl_map_list *isl_stream_read_map_list(__isl_keep isl_stream *s);
 __isl_give isl_set *isl_stream_read_set(__isl_keep isl_stream *s);
