@@ -7863,6 +7863,8 @@ Lists can be created, copied, modified and freed using the following functions.
 		unsigned pos1, unsigned pos2);
 	__isl_give isl_set_list *isl_set_list_reverse(
 		__isl_take isl_set_list *list);
+	__isl_give isl_set_list *isl_set_list_clear(
+		__isl_take isl_set_list *list);
 	__isl_give isl_set_list *isl_set_list_set_set(
 		__isl_take isl_set_list *list, int index,
 		__isl_take isl_set *set);
@@ -7888,6 +7890,7 @@ add elements to a list, increasing its capacity as needed.
 C<isl_set_list_from_set> creates a list with a single element.
 C<isl_set_list_swap> swaps the elements at the specified locations.
 C<isl_set_list_reverse> reverses the elements in the list.
+C<isl_set_list_clear> removes all elements from a list.
 
 Lists can be inspected using the following functions.
 

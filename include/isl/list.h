@@ -50,6 +50,8 @@ __isl_give isl_##EL##_list *isl_##EL##_list_swap(			\
 	unsigned pos2);							\
 __isl_give isl_##EL##_list *isl_##EL##_list_reverse(			\
 	__isl_take isl_##EL##_list *list);				\
+__isl_give isl_##EL##_list *isl_##EL##_list_clear(			\
+	__isl_take isl_##EL##_list *list);				\
 EXPORT									\
 __isl_give isl_##EL##_list *isl_##EL##_list_concat(			\
 	__isl_take isl_##EL##_list *list1,				\
