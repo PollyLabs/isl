@@ -471,8 +471,8 @@ struct isl_sched_graph {
 
 	struct isl_sched_edge *edge;
 	int n_edge;
-	int max_edge[isl_edge_last + 1];
-	struct isl_hash_table *edge_table[isl_edge_last + 1];
+	int max_edge[isl_edge_last_table + 1];
+	struct isl_hash_table *edge_table[isl_edge_last_table + 1];
 
 	struct isl_hash_table *node_table;
 	int n_region;
@@ -579,7 +579,7 @@ static isl_stat graph_edge_tables_add(isl_ctx *ctx,
 {
 	enum isl_edge_type t;
 
-	for (t = isl_edge_first; t <= isl_edge_last; ++t) {
+	for (t = isl_edge_first; t <= isl_edge_last_table; ++t) {
 		if (!is_type(edge, t))
 			continue;
 		if (graph_edge_table_add(ctx, graph, t, edge) < 0)
@@ -596,7 +596,7 @@ static int graph_init_edge_tables(isl_ctx *ctx, struct isl_sched_graph *graph)
 {
 	int i;
 
-	for (i = 0; i <= isl_edge_last; ++i) {
+	for (i = 0; i <= isl_edge_last_table; ++i) {
 		graph->edge_table[i] = isl_hash_table_alloc(ctx,
 							    graph->max_edge[i]);
 		if (!graph->edge_table[i])
@@ -677,7 +677,7 @@ static struct isl_sched_edge *graph_find_matching_edge(
 	enum isl_edge_type i;
 	struct isl_sched_edge *edge;
 
-	for (i = isl_edge_first; i <= isl_edge_last; ++i) {
+	for (i = isl_edge_first; i <= isl_edge_last_table; ++i) {
 		int is_equal;
 
 		edge = graph_find_edge(graph, i, model->src, model->dst);
@@ -701,7 +701,7 @@ static void graph_remove_edge(struct isl_sched_graph *graph,
 	isl_ctx *ctx = isl_map_get_ctx(edge->map);
 	enum isl_edge_type i;
 
-	for (i = isl_edge_first; i <= isl_edge_last; ++i) {
+	for (i = isl_edge_first; i <= isl_edge_last_table; ++i) {
 		struct isl_hash_table_entry *entry;
 
 		entry = graph_find_edge_entry(graph, i, edge->src, edge->dst);
@@ -722,7 +722,7 @@ static isl_bool graph_has_any_edge(struct isl_sched_graph *graph,
 	enum isl_edge_type i;
 	isl_bool r;
 
-	for (i = isl_edge_first; i <= isl_edge_last; ++i) {
+	for (i = isl_edge_first; i <= isl_edge_last_table; ++i) {
 		r = graph_has_edge(graph, i, src, dst);
 		if (r < 0 || r)
 			return r;
@@ -874,7 +874,7 @@ static void graph_free(isl_ctx *ctx, struct isl_sched_graph *graph)
 		}
 	free(graph->edge);
 	free(graph->region);
-	for (i = 0; i <= isl_edge_last; ++i)
+	for (i = 0; i <= isl_edge_last_table; ++i)
 		isl_hash_table_free(ctx, graph->edge_table[i]);
 	isl_hash_table_free(ctx, graph->node_table);
 	isl_basic_set_free(graph->lp);
@@ -1805,7 +1805,7 @@ static isl_stat graph_init(struct isl_sched_graph *graph,
 		return isl_stat_error;
 	if (graph_set_intra(graph, sc) < 0)
 		return isl_stat_error;
-	for (i = isl_edge_first; i <= isl_edge_last; ++i) {
+	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i) {
 		c = isl_schedule_constraints_get(sc, i);
 		graph->max_edge[i] = isl_union_map_n_map(c);
 		isl_union_map_free(c);
@@ -1816,7 +1816,7 @@ static isl_stat graph_init(struct isl_sched_graph *graph,
 		return isl_stat_error;
 	graph->n_edge = 0;
 	data.graph = graph;
-	for (i = isl_edge_first; i <= isl_edge_last; ++i) {
+	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i) {
 		isl_stat r;
 
 		data.type = i;
@@ -4754,7 +4754,7 @@ static isl_stat extract_sub_graph(isl_ctx *ctx, struct isl_sched_graph *graph,
 		return isl_stat_error;
 	if (graph_init_table(ctx, sub) < 0)
 		return isl_stat_error;
-	for (t = 0; t <= isl_edge_last; ++t)
+	for (t = 0; t <= isl_edge_last_table; ++t)
 		sub->max_edge[t] = graph->max_edge[t];
 	if (graph_init_edge_tables(ctx, sub) < 0)
 		return isl_stat_error;
@@ -7241,7 +7241,7 @@ static __isl_give isl_schedule_constraints *add_non_conditional_constraints(
 	if (!sc)
 		return NULL;
 
-	for (t = isl_edge_first; t <= isl_edge_last; ++t) {
+	for (t = isl_edge_first; t <= isl_edge_last_sc; ++t) {
 		if (t == isl_edge_condition ||
 		    t == isl_edge_conditional_validity)
 			continue;

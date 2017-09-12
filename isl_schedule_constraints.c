@@ -52,7 +52,7 @@ struct isl_schedule_constraints {
 	isl_union_set *domain;
 	isl_set *context;
 
-	isl_union_map *constraint[isl_edge_last + 1];
+	isl_union_map *constraint[isl_edge_last_sc + 1];
 	isl_multi_aff_list *intra;
 };
 
@@ -74,7 +74,7 @@ __isl_give isl_schedule_constraints *isl_schedule_constraints_copy(
 	if (!sc_copy->domain || !sc_copy->context || !sc_copy->intra)
 		return isl_schedule_constraints_free(sc_copy);
 
-	for (i = isl_edge_first; i <= isl_edge_last; ++i) {
+	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i) {
 		sc_copy->constraint[i] = isl_union_map_copy(sc->constraint[i]);
 		if (!sc_copy->constraint[i])
 			return isl_schedule_constraints_free(sc_copy);
@@ -112,7 +112,7 @@ static __isl_give isl_schedule_constraints *isl_schedule_constraints_init(
 	if (!sc->context)
 		sc->context = isl_set_universe(isl_space_copy(space));
 	empty = isl_union_map_empty(space);
-	for (i = isl_edge_first; i <= isl_edge_last; ++i) {
+	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i) {
 		if (sc->constraint[i])
 			continue;
 		sc->constraint[i] = isl_union_map_copy(empty);
@@ -284,7 +284,7 @@ __isl_null isl_schedule_constraints *isl_schedule_constraints_free(
 	isl_union_set_free(sc->domain);
 	isl_set_free(sc->context);
 	isl_multi_aff_list_free(sc->intra);
-	for (i = isl_edge_first; i <= isl_edge_last; ++i)
+	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i)
 		isl_union_map_free(sc->constraint[i]);
 
 	free(sc);
@@ -482,7 +482,7 @@ __isl_give isl_schedule_constraints *isl_schedule_constraints_apply(
 	if (!sc || !umap)
 		goto error;
 
-	for (i = isl_edge_first; i <= isl_edge_last; ++i) {
+	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i) {
 		int tag = may_be_tagged(i);
 
 		sc->constraint[i] = apply(sc->constraint[i], umap, tag);
@@ -776,11 +776,11 @@ isl_schedule_constraints_align_params(__isl_take isl_schedule_constraints *sc)
 
 	space = isl_union_set_get_space(sc->domain);
 	space = isl_space_align_params(space, isl_set_get_space(sc->context));
-	for (i = isl_edge_first; i <= isl_edge_last; ++i)
+	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i)
 		space = isl_space_align_params(space,
 				    isl_union_map_get_space(sc->constraint[i]));
 
-	for (i = isl_edge_first; i <= isl_edge_last; ++i) {
+	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i) {
 		sc->constraint[i] = isl_union_map_align_params(
 				    sc->constraint[i], isl_space_copy(space));
 		if (!sc->constraint[i])
@@ -817,7 +817,7 @@ int isl_schedule_constraints_n_basic_map(
 
 	if (!sc)
 		return -1;
-	for (i = isl_edge_first; i <= isl_edge_last; ++i)
+	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i)
 		if (isl_union_map_foreach_map(sc->constraint[i],
 						&add_n_basic_map, &n) < 0)
 			return -1;
@@ -832,7 +832,7 @@ int isl_schedule_constraints_n_map(__isl_keep isl_schedule_constraints *sc)
 	enum isl_edge_type i;
 	int n = 0;
 
-	for (i = isl_edge_first; i <= isl_edge_last; ++i)
+	for (i = isl_edge_first; i <= isl_edge_last_sc; ++i)
 		n += isl_union_map_n_map(sc->constraint[i]);
 
 	return n;
