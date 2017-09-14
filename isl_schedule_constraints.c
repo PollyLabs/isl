@@ -200,6 +200,19 @@ error:
 	return NULL;
 }
 
+/* Intersect the domain of "sc" with "domain".
+ */
+__isl_give isl_schedule_constraints *isl_schedule_constraints_intersect_domain(
+	__isl_take isl_schedule_constraints *sc,
+	__isl_take isl_union_set *domain)
+{
+	isl_union_set *sc_domain;
+
+	sc_domain = isl_schedule_constraints_get_domain(sc);
+	sc_domain = isl_union_set_intersect(sc_domain, domain);
+	return isl_schedule_constraints_set_domain(sc, sc_domain);
+}
+
 /* Replace the context of "sc" by "context".
  */
 __isl_give isl_schedule_constraints *isl_schedule_constraints_set_context(

@@ -128,6 +128,10 @@ __isl_export
 __isl_give isl_multi_union_pw_aff *isl_schedule_constraints_get_prefix(
 	__isl_keep isl_schedule_constraints *sc);
 
+__isl_export
+__isl_give isl_schedule_constraints *isl_schedule_constraints_intersect_domain(
+	__isl_take isl_schedule_constraints *sc,
+	__isl_take isl_union_set *domain);
 __isl_give isl_schedule_constraints *isl_schedule_constraints_apply(
 	__isl_take isl_schedule_constraints *sc,
 	__isl_take isl_union_map *umap);

@@ -9635,6 +9635,10 @@ and manipulated using the following functions.
 		__isl_take isl_schedule_constraints *sc,
 		__isl_take isl_multi_union_pw_aff *prefix);
 	__isl_give isl_schedule_constraints *
+	isl_schedule_constraints_intersect_domain(
+		__isl_take isl_schedule_constraints *sc,
+		__isl_take isl_union_set *domain);
+	__isl_give isl_schedule_constraints *
 	isl_schedule_constraints_apply(
 		__isl_take isl_schedule_constraints *sc,
 		__isl_take isl_union_map *umap);
@@ -9738,6 +9742,9 @@ will therefore not appear in the generated schedule,
 except to balance out band schedules.
 That is, for each band schedule there will be at least one
 scheduled statement without any redundant rows.
+
+The function C<isl_schedule_constraints_intersect_domain>
+restricts the domain to be a subset of the given union set.
 
 The function C<isl_schedule_constraints_apply> takes
 schedule constraints that are defined on some set of domain elements
