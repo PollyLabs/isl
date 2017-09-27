@@ -33,6 +33,9 @@
 #ifndef __isl_overload
 #define __isl_overload
 #endif
+#ifndef __isl_ensure_static
+#define __isl_ensure_static
+#endif
 #ifndef __isl_constructor
 #define __isl_constructor
 #endif

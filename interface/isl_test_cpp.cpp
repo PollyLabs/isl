@@ -314,6 +314,17 @@ void test_foreach(isl::ctx ctx)
 	assert(ret2 == isl::stat::error);
 }
 
+/* Test that ensure_static indeed generates static methods.
+ */
+void test_ensure_static(isl::ctx ctx)
+{
+	isl::set s(ctx, "[N] -> {:}");
+	assert(s.is_params());
+
+	isl::set ss = isl::set::from_params(s);
+	assert(ss.is_params().is_false());
+}
+
 /* Test the isl C++ interface
  *
  * This includes:
@@ -322,6 +333,7 @@ void test_foreach(isl::ctx ctx)
  *  - Different parameter types
  *  - Different return types
  *  - Foreach functions
+ *  - Methods marked ensure_static
  */
 int main()
 {
@@ -332,6 +344,7 @@ int main()
 	test_parameters(ctx);
 	test_return(ctx);
 	test_foreach(ctx);
+	test_ensure_static(ctx);
 
 	isl_ctx_free(ctx);
 }

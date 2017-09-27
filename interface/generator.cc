@@ -46,6 +46,9 @@
  */
 bool generator::is_static(const isl_class &clazz, FunctionDecl *method)
 {
+	if (is_ensure_static(method))
+		return true;
+
 	ParmVarDecl *param = method->getParamDecl(0);
 	QualType type = param->getOriginalType();
 
@@ -172,6 +175,13 @@ bool generator::is_overload(Decl *decl)
 bool generator::is_constructor(Decl *decl)
 {
 	return has_annotation(decl, "isl_constructor");
+}
+
+/* Is decl marked as ensure_static?
+ */
+bool generator::is_ensure_static(Decl *decl)
+{
+	return has_annotation(decl, "isl_ensure_static");
 }
 
 /* Is decl marked as consuming a reference?
