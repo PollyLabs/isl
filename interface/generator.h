@@ -52,6 +52,7 @@ protected:
 	vector<string> find_superclasses(RecordDecl *decl);
 	bool is_overload(Decl *decl);
 	bool is_constructor(Decl *decl);
+	bool is_ensure_static(Decl *decl);
 	bool takes(Decl *decl);
 	bool keeps(Decl *decl);
 	bool gives(Decl *decl);
