@@ -480,8 +480,10 @@ void cpp_generator::print_public_constructors_impl(ostream &os,
 	const char *cppname = cppstring.c_str();
 
 	osprintf(os, "%s::%s()\n    : ptr(nullptr) {}\n\n", cppname, cppname);
-	osprintf(os, "%s::%s(const isl::%s &obj)\n    : ptr(obj.copy()) {}\n",
+	osprintf(os, "%s::%s(const isl::%s &obj)\n    : ptr(obj.copy())\n",
 		 cppname, cppname, cppname);
+	osprintf(os, "{\n");
+	osprintf(os, "}\n");
 }
 
 /* Print implementations of constructors for class "clazz" to "os".
