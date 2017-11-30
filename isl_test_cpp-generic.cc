@@ -219,6 +219,7 @@ static isl::schedule construct_schedule_tree(isl::ctx ctx)
  * In particular, create a simple schedule tree and
  * - check that the root node is a domain node
  * - check that an object of a subclass can be used as one of the superclass
+ * - test map_descendant_bottom_up in the successful case
  */
 static isl::schedule_node test_schedule_tree_generic(isl::ctx ctx)
 {
@@ -227,6 +228,14 @@ static isl::schedule_node test_schedule_tree_generic(isl::ctx ctx)
 
 	assert(root.isa<isl::schedule_node_domain>());
 	root = root.as<isl::schedule_node_domain>().child(0).parent();
+
+	int count = 0;
+	auto inc_count = [&count](isl::schedule_node node) {
+		count++;
+		return node;
+	};
+	root = root.map_descendant_bottom_up(inc_count);
+	assert(count == 8);
 
 	return root;
 }

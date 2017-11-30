@@ -151,11 +151,17 @@ void test_foreach(isl::ctx ctx)
 /* Test basic schedule tree functionality.
  *
  * In particular, create a simple schedule tree and
- * perform some generic tests.
+ * - perform some generic tests
+ * - test map_descendant_bottom_up in the failing case
  */
 static void test_schedule_tree(isl::ctx ctx)
 {
-	test_schedule_tree_generic(ctx);
+	auto root = test_schedule_tree_generic(ctx);
+
+	auto fail_map = [](isl::schedule_node node) {
+		return isl::schedule_node();
+	};
+	assert(root.map_descendant_bottom_up(fail_map).is_null());
 }
 
 /* Test the isl C++ interface

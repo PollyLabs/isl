@@ -219,13 +219,31 @@ def construct_schedule_tree():
 # Test basic schedule tree functionality.
 #
 # In particular, create a simple schedule tree and
-# check that the root node is a domain node.
+# - check that the root node is a domain node
+# - test map_descendant_bottom_up
 #
 def test_schedule_tree():
 	schedule = construct_schedule_tree()
 	root = schedule.get_root()
 
 	assert(type(root) == isl.schedule_node_domain)
+
+	count = [0]
+	def inc_count(node):
+		count[0] += 1
+		return node
+	root = root.map_descendant_bottom_up(inc_count)
+	assert(count[0] == 8)
+
+	def fail_map(node):
+		raise "fail"
+		return node
+	caught = False
+	try:
+		root.map_descendant_bottom_up(fail_map)
+	except:
+		caught = True
+	assert(caught)
 
 # Test the isl Python interface
 #
