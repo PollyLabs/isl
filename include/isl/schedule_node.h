@@ -37,10 +37,12 @@ __isl_export
 __isl_give isl_schedule *isl_schedule_node_get_schedule(
 	__isl_keep isl_schedule_node *node);
 
+__isl_export
 isl_stat isl_schedule_node_foreach_descendant_top_down(
 	__isl_keep isl_schedule_node *node,
 	isl_bool (*fn)(__isl_keep isl_schedule_node *node, void *user),
 	void *user);
+__isl_export
 isl_bool isl_schedule_node_every_descendant(__isl_keep isl_schedule_node *node,
 	isl_bool (*test)(__isl_keep isl_schedule_node *node, void *user),
 	void *user);

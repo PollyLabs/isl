@@ -153,6 +153,8 @@ void test_foreach(isl::ctx ctx)
  * In particular, create a simple schedule tree and
  * - perform some generic tests
  * - test map_descendant_bottom_up in the failing case
+ * - test foreach_descendant_top_down
+ * - test every_descendant
  */
 static void test_schedule_tree(isl::ctx ctx)
 {
@@ -162,6 +164,43 @@ static void test_schedule_tree(isl::ctx ctx)
 		return isl::schedule_node();
 	};
 	assert(root.map_descendant_bottom_up(fail_map).is_null());
+
+	int count = 0;
+	auto inc_count = [&count](isl::schedule_node node) {
+		count++;
+		return isl::boolean(true);
+	};
+	root.foreach_descendant_top_down(inc_count);
+	assert(count == 8);
+
+	count = 0;
+	auto inc_count_once = [&count](isl::schedule_node node) {
+		count++;
+		return isl::boolean(false);
+	};
+	root.foreach_descendant_top_down(inc_count_once);
+	assert(count == 1);
+
+	auto is_not_domain = [](isl::schedule_node node) {
+		return !node.isa<isl::schedule_node_domain>();
+	};
+	assert(root.child(0).every_descendant(is_not_domain).is_true());
+	assert(root.every_descendant(is_not_domain).is_false());
+
+	auto fail = [](isl::schedule_node node) {
+		return isl::boolean();
+	};
+	assert(root.every_descendant(fail).is_error());
+
+	auto domain = root.as<isl::schedule_node_domain>().get_domain();
+	auto filters = isl::union_set(ctx, "{}");
+	auto collect_filters = [&filters](isl::schedule_node node) {
+		if (auto filter = node.as<isl::schedule_node_filter>())
+			filters = filters.unite(filter.get_filter());
+		return isl::boolean(true);
+	};
+	root.every_descendant(collect_filters);
+	assert(domain.is_equal(filters));
 }
 
 /* Test the isl C++ interface

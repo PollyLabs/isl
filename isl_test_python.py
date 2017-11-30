@@ -221,6 +221,8 @@ def construct_schedule_tree():
 # In particular, create a simple schedule tree and
 # - check that the root node is a domain node
 # - test map_descendant_bottom_up
+# - test foreach_descendant_top_down
+# - test every_descendant
 #
 def test_schedule_tree():
 	schedule = construct_schedule_tree()
@@ -244,6 +246,43 @@ def test_schedule_tree():
 	except:
 		caught = True
 	assert(caught)
+
+	count = [0]
+	def inc_count(node):
+		count[0] += 1
+		return True
+	root.foreach_descendant_top_down(inc_count)
+	assert(count[0] == 8)
+
+	count = [0]
+	def inc_count(node):
+		count[0] += 1
+		return False
+	root.foreach_descendant_top_down(inc_count)
+	assert(count[0] == 1)
+
+	def is_not_domain(node):
+		return type(node) != isl.schedule_node_domain
+	assert(root.child(0).every_descendant(is_not_domain))
+	assert(not root.every_descendant(is_not_domain))
+
+	def fail(node):
+		raise "fail"
+	caught = False
+	try:
+		root.every_descendant(fail)
+	except:
+		caught = True
+	assert(caught)
+
+	domain = root.get_domain()
+	filters = [isl.union_set("{}")]
+	def collect_filters(node):
+		if type(node) == isl.schedule_node_filter:
+			filters[0] = filters[0].union(node.get_filter())
+		return True
+	root.every_descendant(collect_filters)
+	assert(domain.is_equal(filters[0]))
 
 # Test the isl Python interface
 #
