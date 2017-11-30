@@ -187,6 +187,46 @@ def test_foreach():
 		caught = True
 	assert(caught)
 
+# Construct a simple schedule tree with an outer sequence node and
+# a single-dimensional band node in each branch, with one of them
+# marked conincident.
+#
+def construct_schedule_tree():
+	A = isl.union_set("{ A[i] : 0 <= i < 10 }")
+	B = isl.union_set("{ B[i] : 0 <= i < 20 }")
+
+	node = isl.schedule_node.from_domain(A.union(B))
+	node = node.child(0)
+
+	filters = isl.union_set_list(A).add(B)
+	node = node.insert_sequence(filters)
+
+	f_A = isl.multi_union_pw_aff("[ { A[i] -> [i] } ]")
+	node = node.child(0)
+	node = node.child(0)
+	node = node.insert_partial_schedule(f_A)
+	node = node.member_set_coincident(0, True)
+	node = node.ancestor(2)
+
+	f_B = isl.multi_union_pw_aff("[ { B[i] -> [i] } ]")
+	node = node.child(1)
+	node = node.child(0)
+	node = node.insert_partial_schedule(f_B)
+	node = node.ancestor(2)
+
+	return node.get_schedule()
+
+# Test basic schedule tree functionality.
+#
+# In particular, create a simple schedule tree and
+# check that the root node is a domain node.
+#
+def test_schedule_tree():
+	schedule = construct_schedule_tree()
+	root = schedule.get_root()
+
+	assert(type(root) == isl.schedule_node_domain)
+
 # Test the isl Python interface
 #
 # This includes:
@@ -194,8 +234,10 @@ def test_foreach():
 #  - Different parameter types
 #  - Different return types
 #  - Foreach functions
+#  - Schedule trees
 #
 test_constructors()
 test_parameters()
 test_return()
 test_foreach()
+test_schedule_tree()

@@ -148,6 +148,16 @@ void test_foreach(isl::ctx ctx)
 	assert(ret2 == isl::stat::error);
 }
 
+/* Test basic schedule tree functionality.
+ *
+ * In particular, create a simple schedule tree and
+ * perform some generic tests.
+ */
+static void test_schedule_tree(isl::ctx ctx)
+{
+	test_schedule_tree_generic(ctx);
+}
+
 /* Test the isl C++ interface
  *
  * This includes:
@@ -156,6 +166,7 @@ void test_foreach(isl::ctx ctx)
  *  - Different parameter types
  *  - Different return types
  *  - Foreach functions
+ *  - Schedule trees
  */
 int main()
 {
@@ -168,6 +179,7 @@ int main()
 	test_parameters(ctx);
 	test_return(ctx);
 	test_foreach(ctx);
+	test_schedule_tree(ctx);
 
 	isl_ctx_free(ctx);
 }

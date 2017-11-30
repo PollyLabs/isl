@@ -138,6 +138,16 @@ static void test_exception(isl::ctx ctx)
 	assert(strstr(copy.what(), "cannot determine domain"));
 }
 
+/* Test basic schedule tree functionality.
+ *
+ * In particular, create a simple schedule tree and
+ * perform some generic tests.
+ */
+static void test_schedule_tree(isl::ctx ctx)
+{
+	test_schedule_tree_generic(ctx);
+}
+
 /* Test the isl C++ interface
  *
  * This includes:
@@ -147,6 +157,7 @@ static void test_exception(isl::ctx ctx)
  *  - Different return types
  *  - Foreach functions
  *  - Exceptions
+ *  - Schedule trees
  */
 int main()
 {
@@ -160,6 +171,7 @@ int main()
 	test_return(ctx);
 	test_foreach(ctx);
 	test_exception(ctx);
+	test_schedule_tree(ctx);
 
 	isl_ctx_free(ctx);
 }

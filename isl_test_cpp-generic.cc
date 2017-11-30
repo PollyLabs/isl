@@ -179,3 +179,54 @@ void test_return_string(isl::ctx ctx)
 	expected_string = "n >= 0";
 	assert(expected_string == expr.to_C_str());
 }
+
+/* Construct a simple schedule tree with an outer sequence node and
+ * a single-dimensional band node in each branch, with one of them
+ * marked conincident.
+ */
+static isl::schedule construct_schedule_tree(isl::ctx ctx)
+{
+	isl::union_set A(ctx, "{ A[i] : 0 <= i < 10 }");
+	isl::union_set B(ctx, "{ B[i] : 0 <= i < 20 }");
+
+	auto node = isl::schedule_node::from_domain(A.unite(B));
+	node = node.child(0);
+
+	isl::union_set_list filters(ctx, 0);
+	filters = filters.add(A).add(B);
+	node = node.insert_sequence(filters);
+
+	isl::multi_union_pw_aff f_A(ctx, "[ { A[i] -> [i] } ]");
+	node = node.child(0);
+	node = node.child(0);
+	node = node.insert_partial_schedule(f_A);
+	auto band = node.as<isl::schedule_node_band>();
+	band = band.member_set_coincident(0, true);
+	node = band.ancestor(2);
+
+	isl::multi_union_pw_aff f_B(ctx, "[ { B[i] -> [i] } ]");
+	node = node.child(1);
+	node = node.child(0);
+	node = node.insert_partial_schedule(f_B);
+	node = node.ancestor(2);
+
+	return node.get_schedule();
+}
+
+/* Test basic schedule tree functionality that is independent
+ * of the availability of exceptions.
+ *
+ * In particular, create a simple schedule tree and
+ * - check that the root node is a domain node
+ * - check that an object of a subclass can be used as one of the superclass
+ */
+static isl::schedule_node test_schedule_tree_generic(isl::ctx ctx)
+{
+	auto schedule = construct_schedule_tree(ctx);
+	auto root = schedule.get_root();
+
+	assert(root.isa<isl::schedule_node_domain>());
+	root = root.as<isl::schedule_node_domain>().child(0).parent();
+
+	return root;
+}
