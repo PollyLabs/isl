@@ -31,6 +31,7 @@ private:
 	void print_forward_declarations(ostream &os);
 	void print_declarations(ostream &os);
 	void print_class(ostream &os, const isl_class &clazz);
+	void print_subclass_type(ostream &os, const isl_class &clazz);
 	void print_class_forward_decl(ostream &os, const isl_class &clazz);
 	void print_class_factory_decl(ostream &os, const isl_class &clazz,
 		const std::string &prefix = std::string());
@@ -42,6 +43,7 @@ private:
 	void print_constructors_decl(ostream &os, const isl_class &clazz);
 	void print_destructor_decl(ostream &os, const isl_class &clazz);
 	void print_ptr_decl(ostream &os, const isl_class &clazz);
+	void print_downcast_decl(ostream &os, const isl_class &clazz);
 	void print_get_ctx_decl(ostream &os);
 	void print_methods_decl(ostream &os, const isl_class &clazz);
 	void print_method_group_decl(ostream &os, const isl_class &clazz,
@@ -60,6 +62,7 @@ private:
 	void print_copy_assignment_impl(ostream &os, const isl_class &clazz);
 	void print_destructor_impl(ostream &os, const isl_class &clazz);
 	void print_ptr_impl(ostream &os, const isl_class &clazz);
+	bool print_downcast_impl(ostream &os, const isl_class &clazz);
 	void print_get_ctx_impl(ostream &os, const isl_class &clazz);
 	void print_methods_impl(ostream &os, const isl_class &clazz);
 	void print_method_group_impl(ostream &os, const isl_class &clazz,
@@ -79,6 +82,7 @@ private:
 		function_kind kind);
 	void print_method_param_use(ostream &os, ParmVarDecl *param,
 		bool load_from_this_ptr);
+	bool super2sub(const isl_class &clazz, std::string &type);
 	void print_method_header(ostream &os, const isl_class &clazz,
 		FunctionDecl *method, const string &fullname,
 		bool is_declaration, function_kind kind);
