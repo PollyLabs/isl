@@ -49,6 +49,7 @@ public:
 	virtual ~generator() {};
 
 protected:
+	void add_class(RecordDecl *decl);
 	void print_class_header(const isl_class &clazz, const string &name,
 		const vector<string> &super);
 	string drop_type_suffix(string name, FunctionDecl *method);
