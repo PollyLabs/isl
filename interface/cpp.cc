@@ -348,6 +348,11 @@ void cpp_generator::print_destructor_decl(ostream &os, const isl_class &clazz)
  *
  * 	  Check if the current object is a null pointer.
  *
+ * 	4) explicit operator bool()
+ *
+ * 	  Check if the current object represents a valid isl object,
+ *	  i.e., if it is not a null pointer.
+ *
  * The functions get() and release() model the value_ptr proposed in
  * http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2012/n3339.pdf.
  * The copy() function is an extension to allow the user to explicitly
@@ -365,6 +370,7 @@ void cpp_generator::print_ptr_decl(ostream &os, const isl_class &clazz)
 	osprintf(os, "  inline __isl_keep %s *get() const;\n", name);
 	osprintf(os, "  inline __isl_give %s *release();\n", name);
 	osprintf(os, "  inline bool is_null() const;\n");
+	osprintf(os, "  inline explicit operator bool() const;\n");
 }
 
 /* Print the declaration of the get_ctx method.
@@ -607,6 +613,10 @@ void cpp_generator::print_ptr_impl(ostream &os, const isl_class &clazz)
 	osprintf(os, "}\n\n");
 	osprintf(os, "bool %s::is_null() const {\n", cppname);
 	osprintf(os, "  return ptr == nullptr;\n");
+	osprintf(os, "}\n");
+	osprintf(os, "%s::operator bool() const\n", cppname);
+	osprintf(os, "{\n");
+	osprintf(os, "  return !is_null();\n");
 	osprintf(os, "}\n");
 }
 
