@@ -89,6 +89,7 @@ private:
 	void print_wrapped_call(std::ostream &os, const std::string &call);
 	void print_callback_local(ostream &os, ParmVarDecl *param);
 	std::string rename_method(std::string name);
+	string isl_bool2cpp();
 	string type2cpp(const isl_class &clazz);
 	string type2cpp(string type_string);
 	string type2cpp(QualType type);

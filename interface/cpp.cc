@@ -1364,6 +1364,15 @@ string cpp_generator::type2cpp(string type_str)
 	return type_str.substr(4);
 }
 
+/* Return the C++ counterpart to the isl_bool type.
+ * If C++ bindings without exceptions are being generated,
+ * then this is isl::boolean.  Otherwise, it is simply "bool".
+ */
+string cpp_generator::isl_bool2cpp()
+{
+	return noexceptions ? "isl::boolean" : "bool";
+}
+
 /* Translate QualType "type" to its C++ name counterpart.
  *
  * An isl_bool return type is translated into "bool",
@@ -1378,7 +1387,7 @@ string cpp_generator::type2cpp(QualType type)
 		return "isl::" + type2cpp(type->getPointeeType().getAsString());
 
 	if (is_isl_bool(type))
-		return noexceptions ? "isl::boolean" : "bool";
+		return isl_bool2cpp();
 
 	if (is_isl_stat(type))
 		return noexceptions ? "isl::stat" : "void";
