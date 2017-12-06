@@ -54,7 +54,7 @@ protected:
 	string drop_type_suffix(string name, FunctionDecl *method);
 	void die(const char *msg) __attribute__((noreturn));
 	void die(string msg) __attribute__((noreturn));
-	vector<string> find_superclasses(RecordDecl *decl);
+	vector<string> find_superclasses(Decl *decl);
 	bool is_overload(Decl *decl);
 	bool is_constructor(Decl *decl);
 	bool takes(Decl *decl);
