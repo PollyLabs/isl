@@ -78,6 +78,7 @@ protected:
 	isl_class *method2class(FunctionDecl *fd);
 	bool is_isl_ctx(QualType type);
 	bool first_arg_is_isl_ctx(FunctionDecl *fd);
+	bool callback_takes_arguments(const FunctionProtoType *fn_type);
 	bool is_isl_type(QualType type);
 	bool is_isl_bool(QualType type);
 	bool is_isl_stat(QualType type);

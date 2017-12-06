@@ -312,6 +312,18 @@ bool generator::first_arg_is_isl_ctx(FunctionDecl *fd)
 	return is_isl_ctx(param->getOriginalType());
 }
 
+/* Does a callback of type "fn_type" take its arguments?
+ *
+ * The memory management annotations of arguments to function pointers
+ * are not recorded by clang, so the information cannot be extracted
+ * from "fn_type".
+ * Assume all callbacks take their arguments.
+ */
+bool generator::callback_takes_arguments(const FunctionProtoType *fn_type)
+{
+	return true;
+}
+
 /* Is "type" that of a pointer to an isl_* structure?
  */
 bool generator::is_isl_type(QualType type)

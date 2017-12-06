@@ -1503,6 +1503,9 @@ void cpp_generator::print_wrapped_call(ostream &os, const string &call,
  *
  *        stat ret = (*data->func)(isl::manage(arg_0));
  *        return isl_stat(ret);
+ *
+ * If the C callback does not take its arguments, then
+ * isl::manage_copy is used instead of isl::manage.
  */
 void cpp_generator::print_callback_local(ostream &os, ParmVarDecl *param)
 {
@@ -1527,7 +1530,11 @@ void cpp_generator::print_callback_local(ostream &os, ParmVarDecl *param)
 
 	call = "(*data->func)(";
 	for (long i = 0; i < num_params - 1; i++) {
-		call += "isl::manage(arg_" + ::to_string(i) + ")";
+		if (!callback_takes_arguments(callback))
+			call += "isl::manage_copy";
+		else
+			call += "isl::manage";
+		call += "(arg_" + ::to_string(i) + ")";
 		if (i != num_params - 2)
 			call += ", ";
 	}

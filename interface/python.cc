@@ -119,7 +119,8 @@ void python_generator::print_copy(QualType type)
  * Assign the wrapper to "cb".  We assume here that a function call
  * has at most one callback argument.
  *
- * The wrapper converts the arguments of the callback to python types.
+ * The wrapper converts the arguments of the callback to python types,
+ * taking a copy if the C callback does not take its arguments.
  * If any exception is thrown, the wrapper keeps track of it in exc_info[0]
  * and returns a value indicating an error.  Otherwise the wrapper
  * returns a value indicating success.
@@ -156,8 +157,11 @@ void python_generator::print_callback(QualType type, int arg)
 	for (unsigned i = 0; i < n_arg - 1; ++i) {
 		string arg_type;
 		arg_type = type2python(extract_type(fn->getArgType(i)));
-		printf("            cb_arg%d = %s(ctx=arg0.ctx, "
-			"ptr=cb_arg%d)\n", i, arg_type.c_str(), i);
+		printf("            cb_arg%d = %s(ctx=arg0.ctx, ptr=",
+			i, arg_type.c_str());
+		if (!callback_takes_arguments(fn))
+			print_copy(fn->getArgType(i));
+		printf("(cb_arg%d))\n", i);
 	}
 	printf("            try:\n");
 	if (is_isl_stat(return_type))
