@@ -26,6 +26,11 @@ struct isl_class {
 	FunctionDecl *fn_to_str;
 	FunctionDecl *fn_copy;
 	FunctionDecl *fn_free;
+
+	/* Extract the method name from the C function name. */
+	string method_suffix(const string &function_name) const {
+		return function_name.substr(name.length() + 1);
+	}
 };
 
 /* Base class for interface generators.
