@@ -530,9 +530,10 @@ void cpp_generator::print_public_constructors_impl(ostream &os,
 	std::string cppstring = type2cpp(clazz);
 	const char *cppname = cppstring.c_str();
 
-	osprintf(os, "%s::%s()\n    : ptr(nullptr) {}\n\n", cppname, cppname);
-	osprintf(os, "%s::%s(const isl::%s &obj)\n    : ptr(obj.copy())\n",
-		 cppname, cppname, cppname);
+	osprintf(os, "%s::%s()\n", cppname, cppname);
+	osprintf(os, "    : ptr(nullptr) {}\n\n");
+	osprintf(os, "%s::%s(const isl::%s &obj)\n", cppname, cppname, cppname);
+	osprintf(os, "    : ptr(obj.copy())\n");
 	osprintf(os, "{\n");
 	if (!noexceptions) {
 		osprintf(os, "  if (obj.ptr && !ptr)\n");
