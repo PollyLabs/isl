@@ -295,20 +295,20 @@ libdep_a_SOURCES = all.c
 
 if HAVE_CLANG
 interface/isl.py: interface/extract_interface libdep.a python/isl.py.top
-	(cat $(srcdir)/python/isl.py.top; \
+	(cat $(srcdir)/python/isl.py.top && \
 		interface/extract_interface$(EXEEXT) --language=python \
 			$(includes) $(srcdir)/all.h) \
-			> $@
+			> $@ || (rm $@ && false)
 
 interface/isl-noexceptions.h: interface/extract_interface libdep.a \
 		cpp/isl-noexceptions.h.top \
 		cpp/isl-noexceptions.h.pre cpp/isl-noexceptions.h.bot
 	(cat $(srcdir)/cpp/isl-noexceptions.h.top $(srcdir)/all.h \
-	    $(srcdir)/cpp/isl-noexceptions.h.pre; \
+	    $(srcdir)/cpp/isl-noexceptions.h.pre && \
 		interface/extract_interface$(EXEEXT) --language=cpp \
-			$(includes) $(srcdir)/all.h; \
+			$(includes) $(srcdir)/all.h && \
 		cat $(srcdir)/cpp/isl-noexceptions.h.bot) \
-			> $@
+			> $@ || (rm $@ && false)
 endif
 
 nodist_pkginclude_HEADERS = \
