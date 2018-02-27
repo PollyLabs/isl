@@ -212,6 +212,7 @@ static void test_schedule_tree(isl::ctx ctx)
  *  - Different return types
  *  - Foreach functions
  *  - Schedule trees
+ *  - AST generation
  */
 int main()
 {
@@ -225,6 +226,7 @@ int main()
 	test_return(ctx);
 	test_foreach(ctx);
 	test_schedule_tree(ctx);
+	test_ast_build(ctx);
 
 	isl_ctx_free(ctx);
 }
