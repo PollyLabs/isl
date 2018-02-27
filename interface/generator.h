@@ -63,8 +63,6 @@ protected:
 	void add_subclass(RecordDecl *decl, const string &sub_name);
 	void add_class(RecordDecl *decl);
 	void add_type_subclasses(FunctionDecl *method);
-	void print_class_header(const isl_class &clazz, const string &name,
-		const vector<string> &super);
 	string drop_type_suffix(string name, FunctionDecl *method);
 	void die(const char *msg) __attribute__((noreturn));
 	void die(string msg) __attribute__((noreturn));
