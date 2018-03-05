@@ -122,6 +122,16 @@ __isl_give isl_id *isl_id_alloc(isl_ctx *ctx, const char *name, void *user)
 	return entry->data;
 }
 
+/* Read an isl_id object from the string "str".
+ * In particular, take "str" as the name of the identifier.
+ */
+__isl_give isl_id *isl_id_read_from_str(isl_ctx *ctx, const char *str)
+{
+	if (!str)
+		return NULL;
+	return isl_id_alloc(ctx, str, NULL);
+}
+
 /* If the id has a negative refcount, then it is a static isl_id
  * which should not be changed.
  */
