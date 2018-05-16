@@ -4687,6 +4687,14 @@ on a given parameter domain using the following functions.
 	__isl_give isl_set *isl_set_from_params(
 		__isl_take isl_set *set);
 
+An n-dimensional set can be constructed from a given parameter set by providing
+a list of isl ids that identify the parameter dimensions which should be
+promoted to set dimensions.
+
+	#include <isl/set.h>
+	__isl_give isl_set *isl_set_from_id_list_params(
+		__isl_take isl_id_list *ids, __isl_take isl_set *set);
+
 =item * Constructing a relation from one or two sets
 
 Create a relation with the given set(s) as domain and/or range.

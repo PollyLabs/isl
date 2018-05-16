@@ -5675,6 +5675,36 @@ __isl_give isl_set *isl_set_from_params(__isl_take isl_set *set)
 	return set;
 }
 
+/* Construct a set from a parameter set with named dimensions and a list of ids
+ * that indicate the parameter dimensions that should be promoted to set
+ * dimensions.
+ */
+__isl_give isl_set *isl_set_from_id_list_params(__isl_take isl_id_list *ids,
+	__isl_take isl_set *set)
+{
+	int i;
+
+	if (!ids)
+		return isl_set_free(set);
+
+	if (!set) {
+		isl_id_list_free(ids);
+		return NULL;
+	}
+
+	for (i = 0; i < isl_id_list_n_id(ids); i++) {
+		int p;
+
+		p = isl_set_find_dim_by_id(set, isl_dim_param,
+					   isl_id_list_get_id(ids, i));
+		set = isl_set_insert_dims(set, isl_dim_set, i, 1);
+		set = isl_set_equate(set, isl_dim_param, p, isl_dim_set, i);
+		set = isl_set_project_out(set, isl_dim_param, p, 1);
+	}
+
+	return set;
+}
+
 /* Compute the parameter domain of the given map.
  */
 __isl_give isl_set *isl_map_params(__isl_take isl_map *map)
