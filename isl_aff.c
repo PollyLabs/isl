@@ -236,6 +236,21 @@ __isl_give isl_pw_aff *isl_pw_aff_param_from_id(__isl_take isl_id *id)
 	return isl_pw_aff_from_aff(aff);
 }
 
+/* Return a piecewise affine expression defined over a zero-dimensional
+ * parameter space. The value of the affine expression is "val".
+ */
+__isl_give isl_pw_aff *isl_pw_aff_val_from_val(__isl_take isl_val *val)
+{
+	isl_space *space;
+
+	if (!val)
+		return NULL;
+
+	space = isl_space_params_alloc(isl_val_get_ctx(val), 0);
+
+	return isl_pw_aff_val_on_domain(isl_set_universe(space), val);
+}
+
 /* Return a piecewise affine expression that is equal to
  * the specified dimension in "ls".
  */
