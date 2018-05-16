@@ -4763,6 +4763,34 @@ static isl_bool union_pw_aff_plain_is_equal(__isl_keep isl_union_pw_aff *upa,
 	return equal;
 }
 
+/* Basic tests on isl_pw_aff.
+ *
+ * In particular, test the construction of a single-parameter pw_aff from an id.
+ */
+static isl_stat test_pa(isl_ctx *ctx) {
+	isl_id *id;
+	isl_pw_aff *pwa, *pwa2;
+	isl_bool equal;
+
+	id = isl_id_alloc(ctx, "P", NULL);
+	pwa = isl_pw_aff_param_from_id(id);
+	pwa2 = isl_pw_aff_read_from_str(ctx, "[P] -> { [(P)] }");
+
+	equal = isl_pw_aff_plain_is_equal(pwa, pwa2);
+
+	isl_pw_aff_free(pwa);
+	isl_pw_aff_free(pwa2);
+
+	if (equal < 0)
+		return isl_stat_error;
+	if (!equal)
+		isl_die(ctx, isl_error_unknown,
+			"can not construct piecewise aff from id",
+			return isl_stat_error);
+
+	return isl_stat_ok;
+}
+
 /* Check that "upa" is obviously equal to the isl_union_pw_aff
  * represented by "str".
  */
@@ -6048,6 +6076,8 @@ int test_aff(isl_ctx *ctx)
 	isl_aff *aff;
 	int zero, equal;
 
+	if (test_pa(ctx) < 0)
+		return -1;
 	if (test_upa(ctx) < 0)
 		return -1;
 	if (test_bin_aff(ctx) < 0)

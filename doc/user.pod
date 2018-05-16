@@ -3072,8 +3072,9 @@ created using the following functions.
 		__isl_take isl_set *set,
 		__isl_take isl_qpolynomial *qp);
 
-The following convenience functions first create a base expression and
-then create a piecewise expression over a universe domain.
+The following convenience functions first create a base expression and then
+create a piecewise expression over a domain that is a universe set in the given
+(local) space.
 
 	#include <isl/aff.h>
 	__isl_give isl_pw_aff *isl_pw_aff_zero_on_domain(
@@ -3098,6 +3099,14 @@ then create a piecewise expression over a universe domain.
 	#include <isl/polynomial.h>
 	__isl_give isl_pw_qpolynomial *isl_pw_qpolynomial_zero(
 		__isl_take isl_space *space);
+
+The following convenience functions first create a base expression and then
+create a piecewise expression over a universe domain of a parameter space
+which contains exactly one parameter dimension corresponding to the given
+isl id.
+
+	#include <isl/aff.h>
+	__isl_give isl_pw_aff *isl_pw_aff_param_from_id(__isl_take isl_id *id);
 
 The following convenience functions first create a base expression and
 then create a piecewise expression over a given domain.
