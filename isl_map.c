@@ -5705,6 +5705,54 @@ __isl_give isl_set *isl_set_from_id_list_params(__isl_take isl_id_list *ids,
 	return set;
 }
 
+/* Construct a map from a map with named parameter dimensions and two list of
+ * ids that indicates the parameter dimensions that should be promoted to map
+ * dimensions.
+ */
+__isl_give isl_map *isl_map_from_id_list_params(__isl_take isl_id_list *ids_in,
+	__isl_take isl_id_list *ids_out, __isl_take isl_map *map)
+{
+	int i;
+
+	if (!map) {
+		isl_id_list_free(ids_in);
+		isl_id_list_free(ids_out);
+		return NULL;
+	}
+
+	if (!ids_in) {
+		isl_id_list_free(ids_out);
+		return isl_map_free(map);
+	}
+
+	if (!ids_out) {
+		isl_id_list_free(ids_in);
+		return isl_map_free(map);
+	}
+
+	for (i = 0; i < isl_id_list_n_id(ids_in); i++) {
+		int p;
+
+		p = isl_map_find_dim_by_id(map, isl_dim_param,
+					   isl_id_list_get_id(ids_in, i));
+		map = isl_map_insert_dims(map, isl_dim_in, i, 1);
+		map = isl_map_equate(map, isl_dim_param, p, isl_dim_in, i);
+		map = isl_map_project_out(map, isl_dim_param, p, 1);
+	}
+
+	for (i = 0; i < isl_id_list_n_id(ids_out); i++) {
+		int p;
+
+		p = isl_map_find_dim_by_id(map, isl_dim_param,
+					   isl_id_list_get_id(ids_out, i));
+		map = isl_map_insert_dims(map, isl_dim_out, i, 1);
+		map = isl_map_equate(map, isl_dim_param, p, isl_dim_out, i);
+		map = isl_map_project_out(map, isl_dim_param, p, 1);
+	}
+
+	return map;
+}
+
 /* Compute the parameter domain of the given map.
  */
 __isl_give isl_set *isl_map_params(__isl_take isl_map *map)
