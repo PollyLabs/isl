@@ -3109,6 +3109,8 @@ value is constructed.
 	#include <isl/aff.h>
 	__isl_give isl_pw_aff *isl_pw_aff_param_from_id(__isl_take isl_id *id);
 	__isl_give isl_pw_aff *isl_pw_aff_val_from_val(__isl_take isl_val *val);
+	__isl_give isl_pw_aff *isl_pw_aff_val_from_si(__isl_keep isl_ctx *ctx,
+		int val);
 
 The following convenience functions first create a base expression and
 then create a piecewise expression over a given domain.

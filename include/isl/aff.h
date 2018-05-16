@@ -201,6 +201,7 @@ __isl_give isl_pw_aff *isl_pw_aff_var_on_domain(__isl_take isl_local_space *ls,
 
 __isl_give isl_pw_aff *isl_pw_aff_param_from_id(__isl_take isl_id *id);
 __isl_give isl_pw_aff *isl_pw_aff_val_from_val(__isl_take isl_val *val);
+__isl_give isl_pw_aff *isl_pw_aff_val_from_si(__isl_keep isl_ctx *ctx, int val);
 
 __isl_give isl_pw_aff *isl_pw_aff_nan_on_domain(__isl_take isl_local_space *ls);
 __isl_give isl_pw_aff *isl_pw_aff_val_on_domain(__isl_take isl_set *domain,

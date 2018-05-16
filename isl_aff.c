@@ -251,6 +251,21 @@ __isl_give isl_pw_aff *isl_pw_aff_val_from_val(__isl_take isl_val *val)
 	return isl_pw_aff_val_on_domain(isl_set_universe(space), val);
 }
 
+/* Return a piecewise affine expression defined over a zero-dimensional
+ * parameter space. The value of the affine expression is "val".
+ */
+__isl_give isl_pw_aff *isl_pw_aff_val_from_si(__isl_keep isl_ctx *ctx, int val)
+{
+	isl_val *v;
+
+	if (!ctx)
+		return NULL;
+
+	v = isl_val_int_from_si(ctx, v);
+
+	return isl_pw_aff_val_from_val(v);
+}
+
 /* Return a piecewise affine expression that is equal to
  * the specified dimension in "ls".
  */
