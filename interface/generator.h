@@ -55,13 +55,13 @@ protected:
 	bool takes(Decl *decl);
 	bool keeps(Decl *decl);
 	bool gives(Decl *decl);
-	isl_class *method2class(map<string, isl_class> &classes,
-		FunctionDecl *fd);
+	isl_class *method2class(FunctionDecl *fd);
 	bool is_isl_ctx(QualType type);
 	bool first_arg_is_isl_ctx(FunctionDecl *fd);
 	bool is_isl_type(QualType type);
 	bool is_isl_bool(QualType type);
 	bool is_isl_stat(QualType type);
+	bool is_long(QualType type);
 	bool is_callback(QualType type);
 	bool is_string(QualType type);
 	bool is_static(const isl_class &clazz, FunctionDecl *method);

@@ -3,14 +3,14 @@
 
 #include <isl/ctx.h>
 #include <isl/constraint.h>
-#include <isl/space.h>
+#include <isl/space_type.h>
 #include <isl/set_type.h>
 #include <isl/point.h>
 #include <isl/printer.h>
 #include <isl/union_set_type.h>
 #include <isl/aff_type.h>
 #include <isl/polynomial_type.h>
-#include <isl/val.h>
+#include <isl/val_type.h>
 
 #if defined(__cplusplus)
 extern "C" {
@@ -195,6 +195,9 @@ __isl_give isl_pw_qpolynomial *isl_pw_qpolynomial_split_dims(
 	__isl_take isl_pw_qpolynomial *pwqp,
 	enum isl_dim_type type, unsigned first, unsigned n);
 
+__isl_give isl_pw_qpolynomial *isl_pw_qpolynomial_drop_unused_params(
+	__isl_take isl_pw_qpolynomial *pwqp);
+
 __isl_give isl_pw_qpolynomial *isl_pw_qpolynomial_add(
 	__isl_take isl_pw_qpolynomial *pwqp1,
 	__isl_take isl_pw_qpolynomial *pwqp2);
@@ -316,6 +319,10 @@ __isl_give isl_qpolynomial_fold *isl_qpolynomial_fold_substitute(
 	enum isl_dim_type type, unsigned first, unsigned n,
 	__isl_keep isl_qpolynomial **subs);
 
+__isl_give isl_pw_qpolynomial_fold *isl_pw_qpolynomial_fold_fix_val(
+	__isl_take isl_pw_qpolynomial_fold *pwf,
+	enum isl_dim_type type, unsigned n, __isl_take isl_val *v);
+
 __isl_give isl_val *isl_qpolynomial_fold_eval(
 	__isl_take isl_qpolynomial_fold *fold, __isl_take isl_point *pnt);
 
@@ -418,6 +425,9 @@ __isl_give isl_pw_qpolynomial_fold *isl_pw_qpolynomial_fold_move_dims(
 	__isl_take isl_pw_qpolynomial_fold *pwf,
 	enum isl_dim_type dst_type, unsigned dst_pos,
 	enum isl_dim_type src_type, unsigned src_pos, unsigned n);
+
+__isl_give isl_pw_qpolynomial_fold *isl_pw_qpolynomial_fold_drop_unused_params(
+	__isl_take isl_pw_qpolynomial_fold *pwf);
 
 __isl_give isl_val *isl_pw_qpolynomial_fold_eval(
 	__isl_take isl_pw_qpolynomial_fold *pwf, __isl_take isl_point *pnt);

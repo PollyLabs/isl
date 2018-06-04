@@ -17,11 +17,20 @@ isl_ctx *FN(UNION,get_ctx)(__isl_keep UNION *u)
 	return u ? u->space->ctx : NULL;
 }
 
-__isl_give isl_space *FN(UNION,get_space)(__isl_keep UNION *u)
+/* Return the space of "u".
+ */
+static __isl_keep isl_space *FN(UNION,peek_space)(__isl_keep UNION *u)
 {
 	if (!u)
 		return NULL;
-	return isl_space_copy(u->space);
+	return u->space;
+}
+
+/* Return a copy of the space of "u".
+ */
+__isl_give isl_space *FN(UNION,get_space)(__isl_keep UNION *u)
+{
+	return isl_space_copy(FN(UNION,peek_space)(u));
 }
 
 /* Return the number of parameters of "u", where "type"
@@ -112,21 +121,8 @@ __isl_give PART *FN(FN(UNION,extract),PARTS)(__isl_keep UNION *u,
 	__isl_take isl_space *space)
 {
 	struct isl_hash_table_entry *entry;
-	isl_bool equal_params;
 
-	if (!u || !space)
-		goto error;
-	equal_params = isl_space_has_equal_params(u->space, space);
-	if (equal_params < 0)
-		goto error;
-	if (!equal_params) {
-		space = isl_space_drop_dims(space, isl_dim_param,
-					0, isl_space_dim(space, isl_dim_param));
-		space = isl_space_align_params(space,
-					FN(UNION,get_space)(u));
-		if (!space)
-			goto error;
-	}
+	space = isl_space_replace_params(space, FN(UNION,peek_space)(u));
 
 	entry = FN(UNION,find_part_entry)(u, space, 0);
 	if (!entry)
@@ -402,7 +398,7 @@ static __isl_give UNION *FN(UNION,realign_domain)(__isl_take UNION *u,
 	if (!u || !r)
 		goto error;
 
-	space = isl_space_copy(r->dim);
+	space = isl_reordering_get_space(r);
 	u = FN(UNION,transform_space)(u, space, &FN(UNION,align_entry), r);
 	isl_reordering_free(r);
 	return u;
@@ -431,7 +427,6 @@ __isl_give UNION *FN(UNION,align_params)(__isl_take UNION *u,
 		return u;
 	}
 
-	model = isl_space_params(model);
 	r = isl_parameter_alignment_reordering(u->space, model);
 	isl_space_free(model);
 
@@ -869,38 +864,6 @@ static __isl_give UNION *FN(UNION,negate_type)(__isl_take UNION *u)
 	return u;
 }
 #endif
-
-static __isl_give PART *FN(UNION,mul_isl_int_entry)(__isl_take PART *part,
-	void *user)
-{
-	isl_int *v = user;
-
-	return FN(PW,mul_isl_int)(part, *v);
-}
-
-__isl_give UNION *FN(UNION,mul_isl_int)(__isl_take UNION *u, isl_int v)
-{
-	if (isl_int_is_one(v))
-		return u;
-
-	if (DEFAULT_IS_ZERO && u && isl_int_is_zero(v)) {
-		UNION *zero;
-		isl_space *dim = FN(UNION,get_space)(u);
-#ifdef HAS_TYPE
-		zero = FN(UNION,ZERO)(dim, u->type);
-#else
-		zero = FN(UNION,ZERO)(dim);
-#endif
-		FN(UNION,free)(u);
-		return zero;
-	}
-
-	u = FN(UNION,transform_inplace)(u, &FN(UNION,mul_isl_int_entry), &v);
-	if (isl_int_is_neg(v))
-		u = FN(UNION,negate_type)(u);
-
-	return u;
-}
 
 /* Multiply "part" by the isl_val "user" and return the result.
  */
