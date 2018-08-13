@@ -1,0 +1,31 @@
+language: c
+
+compiler:
+        - clang
+        - gcc
+
+os:
+        - linux
+
+# OSX builds do not work yet
+#        - osx
+
+osx_image: xcode9
+
+dist: trusty
+
+before_install:
+        - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update          ; fi
+        - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install gmp     ; fi
+        - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install --with-clang --with-lld --with-python llvm ; fi
+        - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install libgmp-dev libedit-dev ; fi
+        - export PATH=/usr/local/opt/llvm/bin:$PATH
+        - git submodule init
+        - git submodule update
+env:
+        - INT=gmp
+        - INT=imath
+        - INT=imath-32
+
+script:
+        - ./autogen.sh && ./configure --with-int=$INT --with-clang=system && make && make check
