@@ -5685,6 +5685,84 @@ __isl_give isl_set *isl_set_from_params(__isl_take isl_set *set)
 	return set;
 }
 
+/* Construct a set from a parameter set with named dimensions and a list of ids
+ * that indicate the parameter dimensions that should be promoted to set
+ * dimensions.
+ */
+__isl_give isl_set *isl_set_from_id_list_params(__isl_take isl_id_list *ids,
+	__isl_take isl_set *set)
+{
+	int i;
+
+	if (!ids)
+		return isl_set_free(set);
+
+	if (!set) {
+		isl_id_list_free(ids);
+		return NULL;
+	}
+
+	for (i = 0; i < isl_id_list_n_id(ids); i++) {
+		int p;
+
+		p = isl_set_find_dim_by_id(set, isl_dim_param,
+					   isl_id_list_get_id(ids, i));
+		set = isl_set_insert_dims(set, isl_dim_set, i, 1);
+		set = isl_set_equate(set, isl_dim_param, p, isl_dim_set, i);
+		set = isl_set_project_out(set, isl_dim_param, p, 1);
+	}
+
+	return set;
+}
+
+/* Construct a map from a map with named parameter dimensions and two list of
+ * ids that indicates the parameter dimensions that should be promoted to map
+ * dimensions.
+ */
+__isl_give isl_map *isl_map_from_id_list_params(__isl_take isl_id_list *ids_in,
+	__isl_take isl_id_list *ids_out, __isl_take isl_map *map)
+{
+	int i;
+
+	if (!map) {
+		isl_id_list_free(ids_in);
+		isl_id_list_free(ids_out);
+		return NULL;
+	}
+
+	if (!ids_in) {
+		isl_id_list_free(ids_out);
+		return isl_map_free(map);
+	}
+
+	if (!ids_out) {
+		isl_id_list_free(ids_in);
+		return isl_map_free(map);
+	}
+
+	for (i = 0; i < isl_id_list_n_id(ids_in); i++) {
+		int p;
+
+		p = isl_map_find_dim_by_id(map, isl_dim_param,
+					   isl_id_list_get_id(ids_in, i));
+		map = isl_map_insert_dims(map, isl_dim_in, i, 1);
+		map = isl_map_equate(map, isl_dim_param, p, isl_dim_in, i);
+		map = isl_map_project_out(map, isl_dim_param, p, 1);
+	}
+
+	for (i = 0; i < isl_id_list_n_id(ids_out); i++) {
+		int p;
+
+		p = isl_map_find_dim_by_id(map, isl_dim_param,
+					   isl_id_list_get_id(ids_out, i));
+		map = isl_map_insert_dims(map, isl_dim_out, i, 1);
+		map = isl_map_equate(map, isl_dim_param, p, isl_dim_out, i);
+		map = isl_map_project_out(map, isl_dim_param, p, 1);
+	}
+
+	return map;
+}
+
 /* Compute the parameter domain of the given map.
  */
 __isl_give isl_set *isl_map_params(__isl_take isl_map *map)

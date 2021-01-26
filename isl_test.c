@@ -587,11 +587,124 @@ static int test_construction_2(isl_ctx *ctx)
 
 /* Basic tests for constructing basic sets.
  */
-static int test_construction(isl_ctx *ctx)
+static int test_construction_bset(isl_ctx *ctx)
 {
 	if (test_construction_1(ctx) < 0)
 		return -1;
 	if (test_construction_2(ctx) < 0)
+		return -1;
+	return 0;
+}
+
+/* Construct the set [p] -> { [i = 10, j = 15] } using
+ * isl_set_from_id_list_params. Check that this set it is equal to the set
+ * parsed from a string.
+ */
+static int test_construction_set_from_id_list_params(isl_ctx *ctx)
+{
+	isl_bool equal;
+	isl_id *id_i, *id_j;
+	isl_id_list *idl;
+	isl_set *pset, *set1, *set2;
+
+	pset = isl_set_read_from_str(ctx,
+		"[p, i, j] -> { : i = 10 and j = 15 }");
+
+	id_i = isl_id_alloc(ctx, "i", NULL);
+	id_j = isl_id_alloc(ctx, "j", NULL);
+
+	idl = isl_id_list_alloc(ctx, 2);
+	idl = isl_id_list_insert(idl, 0, id_i);
+	idl = isl_id_list_insert(idl, 1, id_j);
+
+	set1 = isl_set_from_id_list_params(idl, pset);
+
+	set2 = isl_set_read_from_str(ctx,
+		"[p] -> { [i, j] : i = 10 and j = 15 }");
+
+	equal = isl_set_is_equal(set1, set2);
+	isl_set_free(set1);
+	isl_set_free(set2);
+
+	if (equal < 0)
+		return -1;
+	if (!equal)
+		isl_die(ctx, isl_error_unknown,
+			"failed construction", return -1);
+
+	return 0;
+}
+
+/* Basic tests for constructing sets.
+ */
+static int test_construction_set(isl_ctx *ctx)
+{
+	if (test_construction_set_from_id_list_params(ctx) < 0)
+		return -1;
+	return 0;
+}
+
+/* Construct the map [p] -> { [i = 10] -> [j = 15, k = 20] } using
+ * isl_map_from_id_list_params. Check that it is equal to the map parsed from a
+ * string.
+ */
+static int test_construction_map_from_id_list_params(isl_ctx *ctx)
+{
+	isl_bool equal;
+	isl_id *id_i, *id_j, *id_k;
+	isl_id_list *idl_in, *idl_out;
+	isl_map *pmap, *map1, *map2;
+
+	pmap = isl_map_read_from_str(ctx,
+		"[p, i, j, k] -> { : i = 10 and j = 15 and k = 20}");
+
+	id_i = isl_id_alloc(ctx, "i", NULL);
+	id_j = isl_id_alloc(ctx, "j", NULL);
+	id_k = isl_id_alloc(ctx, "k", NULL);
+
+	idl_in = isl_id_list_alloc(ctx, 1);
+	idl_in = isl_id_list_insert(idl_in, 0, id_i);
+
+	idl_out = isl_id_list_alloc(ctx, 2);
+	idl_out = isl_id_list_insert(idl_out, 0, id_j);
+	idl_out = isl_id_list_insert(idl_out, 1, id_k);
+
+	map1 = isl_map_from_id_list_params(idl_in, idl_out, pmap);
+
+	map2 = isl_map_read_from_str(ctx,
+		"[p] -> { [i] -> [j, k] : i = 10 and j = 15 and k = 20 }");
+
+	equal = isl_map_is_equal(map1, map2);
+	isl_map_free(map1);
+	isl_map_free(map2);
+
+	if (equal < 0)
+		return -1;
+	if (!equal)
+		isl_die(ctx, isl_error_unknown,
+			"failed construction", return -1);
+
+	return 0;
+}
+
+/* Basic tests for constructing maps.
+ */
+static int test_construction_map(isl_ctx *ctx)
+{
+	if (test_construction_map_from_id_list_params(ctx) < 0)
+		return -1;
+	return 0;
+}
+
+/* Basic tests for constructing isl sets and maps.
+ */
+static int test_construction(isl_ctx *ctx)
+{
+	if (test_construction_bset(ctx) < 0)
+		return -1;
+	if (test_construction_set(ctx) < 0)
+		return -1;
+	if (test_construction_map(ctx) < 0)
 		return -1;
 	return 0;
 }
