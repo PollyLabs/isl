@@ -221,6 +221,56 @@ error:
 	return NULL;
 }
 
+/* Return a piecewise affine expression defined over a one-dimensional
+ * parameter space. The identifier of the single parameter dimension is "id".
+ * The value of the affine expression is equal to the single parameter
+ * identified by "id".
+ */
+__isl_give isl_pw_aff *isl_pw_aff_param_from_id(__isl_take isl_id *id)
+{
+	isl_space *space;
+	isl_aff *aff;
+
+	if (!id)
+		return NULL;
+
+	space = isl_space_params_alloc(isl_id_get_ctx(id), 1);
+	space = isl_space_set_dim_id(space, isl_dim_param, 0, isl_id_copy(id));
+	aff = isl_aff_param_on_domain_space_id(space, id);
+
+	return isl_pw_aff_from_aff(aff);
+}
+
+/* Return a piecewise affine expression defined over a zero-dimensional
+ * parameter space. The value of the affine expression is "val".
+ */
+__isl_give isl_pw_aff *isl_pw_aff_val_from_val(__isl_take isl_val *val)
+{
+	isl_space *space;
+
+	if (!val)
+		return NULL;
+
+	space = isl_space_params_alloc(isl_val_get_ctx(val), 0);
+
+	return isl_pw_aff_val_on_domain(isl_set_universe(space), val);
+}
+
+/* Return a piecewise affine expression defined over a zero-dimensional
+ * parameter space. The value of the affine expression is "val".
+ */
+__isl_give isl_pw_aff *isl_pw_aff_val_from_si(__isl_keep isl_ctx *ctx, int val)
+{
+	isl_val *v;
+
+	if (!ctx)
+		return NULL;
+
+	v = isl_val_int_from_si(ctx, v);
+
+	return isl_pw_aff_val_from_val(v);
+}
+
 /* Return a piecewise affine expression that is equal to
  * the specified dimension in "ls".
  */
